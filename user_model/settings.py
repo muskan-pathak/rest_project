@@ -132,11 +132,10 @@ MAILERS = {
 }
 AUTH_USER_MODEL = 'users.User'
 
-
-MAILERS = {
-    "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
-    },
-}
-
 DEFAULT_FROM_EMAIL = "admin@example.com"
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}
