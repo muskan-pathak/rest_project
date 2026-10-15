@@ -25,10 +25,11 @@ class User(AbstractUser):
         ('B-', 'B-'),
         ('AB+', 'AB+'),
         ('AB-', 'AB-'),
-        ('o+', 'o+'),
-        ('o-','o-'),
-         
-        ]
+        ('O+', 'O+'),
+        ('O-', 'O-'),
+    ]
+                
+
     Status_Choices = [
         ('Active', 'Active'),
         ('Inactive', 'Inactive'),
@@ -39,7 +40,7 @@ class User(AbstractUser):
     gender = models.CharField(max_length=12, choices=gender_choices, blank = True)
     nationality = models.CharField(max_length=100, blank=True)
     image = models.ImageField(upload_to='profile_images/',null=True, blank=True)
-    blood_group = models.CharField(max_length=3, choices=Blood_Group_Choices, blank=True)
+    blood_group = models.CharField(max_length=3, choices= Blood_Group_Choices, blank=True)
     phone = models.CharField(max_length=15, blank=True)
     permanent_address = models.TextField(blank=True)
     current_address = models.TextField(blank=True)
