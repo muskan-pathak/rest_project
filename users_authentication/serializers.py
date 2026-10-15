@@ -8,6 +8,21 @@ class LoginSerializer(serializers.Serializer):
     )
 
 
+class SendOTPSerializer(serializers.Serializer):  # validate krega email ko
+    email = serializers.EmailField()
+
+
+class VerifyOTPSerializer(serializers.Serializer): # email and otp dono ko validate krega
+    email = serializers.EmailField()
+    otp = serializers.CharField(
+        min_length=6,
+        max_length=6,
+        trim_whitespace=False
+    )
+
+
+
+
 
 
 

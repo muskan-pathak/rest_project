@@ -1,14 +1,21 @@
-from django.shortcuts import render
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.hashers import make_password
+from django.core.mail import send_mail
+from django.utils import timezone
+
+from datetime import timedelta
+import secrets # otp generate krne ke liye 
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .serializers import LoginSerializer
+from .models import EmailOTP
+from .serializers import LoginSerializer, SendOTPSerializer, VerifyOTPSerializer
+from django.contrib.auth.hashers import check_password
 
 User = get_user_model()
-
 
 class LoginAPIView(APIView):
 
@@ -57,6 +64,111 @@ class LoginAPIView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+
+class SendOTPAPIView(APIView):
+
+    def post(self, request):
+        serializer = SendOTPSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        email = serializer.validated_data['email']
+
+        try:
+            user = User.objects.get(
+                email=email,
+                status='Active'
+            )
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'No active user found with this email'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        otp = f"{secrets.randbelow(900000) + 100000}"
+
+        now = timezone.now()
+
+        EmailOTP.objects.filter(
+            user=user,
+            is_used=False
+        ).update(is_used=True)
+
+        EmailOTP.objects.create(
+            user=user,
+            otp_hash=make_password(otp),
+            expires_at=now + timedelta(minutes=5)
+        )
+
+        send_mail(
+            subject='Your OTP Code',
+            message=f'Your OTP is {otp}. It expires in 5 minutes.',
+            from_email=None,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+
+        return Response(
+            {'message': 'OTP sent successfully to your email'},
+            status=status.HTTP_200_OK
+        )
+
+
+class VerifyOTPAPIView(APIView):
+
+    def post(self, request):
+        serializer = VerifyOTPSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        email = serializer.validated_data['email']
+        otp = serializer.validated_data['otp']
+
+        try:
+            user = User.objects.get(
+                email=email,
+                status='Active'
+            )
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Invalid email or OTP'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp_record = EmailOTP.objects.filter(
+            user=user,
+            is_used=False,
+            expires_at__gt=timezone.now()
+        ).order_by('-created_at').first()
+
+        if otp_record is None or not check_password(
+            otp,
+            otp_record.otp_hash
+        ):
+            return Response(
+                {'error': 'Invalid or expired OTP'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp_record.is_used = True
+        otp_record.save(update_fields=['is_used'])
+
+        return Response(
+            {'message': 'OTP verified successfully'},
+            status=status.HTTP_200_OK
+        )
+
+
 
 
 
