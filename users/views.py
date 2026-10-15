@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import User
 from .serializers import UserSerializer
+from django.core.mail import send_mail
 
 
 class UserListCreateAPI(APIView):
@@ -13,11 +14,21 @@ class UserListCreateAPI(APIView):
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    
     def post(self, request):
         serializer = UserSerializer(data=request.data)
 
         if serializer.is_valid():
             user = serializer.save()
+
+            send_mail(
+                subject='Welcome to Our Platform',
+                message=f'Hello {user.first_name}, your account has been created successfully.',
+                from_email=None,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+
             return Response(
                 UserSerializer(user).data,
                 status=status.HTTP_201_CREATED
@@ -27,6 +38,7 @@ class UserListCreateAPI(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+   
 
 class UserDetailAPI(APIView):
 

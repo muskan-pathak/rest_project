@@ -132,3 +132,11 @@ MAILERS = {
 }
 AUTH_USER_MODEL = 'users.User'
 
+
+MAILERS = {
+    "default": {
+        "BACKEND": "django.core.mail.backends.console.EmailBackend",
+    },
+}
+
+DEFAULT_FROM_EMAIL = "admin@example.com"
