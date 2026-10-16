@@ -20,14 +20,23 @@ class UserListCreateAPI(APIView):
 
         if serializer.is_valid():
             user = serializer.save()
-
-            send_mail(
+            try:
+                send_mail(
                 subject='Welcome to Our Platform',
                 message=f'Hello {user.first_name}, your account has been created successfully.',
-                from_email=None,
+                from_email="muskan.pathak0506@gmail.com",
                 recipient_list=[user.email],
                 fail_silently=False,
-            )
+                )
+             
+            except Exception as e:
+                print(f"Failed to send email >>>>>>> : {str(e)}")
+                return Response(
+                    {"error": f"User created but failed to send email: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+
 
             return Response(
                 UserSerializer(user).data,
@@ -120,4 +129,8 @@ class UserDetailAPI(APIView):
             {"message": "User deactivated successfully"},
             status=status.HTTP_200_OK
         )
+
+
+
+
 

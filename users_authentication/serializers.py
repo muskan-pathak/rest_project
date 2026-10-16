@@ -21,6 +21,21 @@ class VerifyOTPSerializer(serializers.Serializer): # email and otp dono ko valid
     )
 
 
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()  # jiska password reset krna h uska email
+    otp = serializers.RegexField(regex=r'^\d{6}$')
+    new_password = serializers.CharField(
+        write_only=True,  # new password api mai show nhi hoga
+        min_length=8,
+        trim_whitespace=False
+    )
+
+
+
 
 
 
