@@ -5,6 +5,7 @@ from rest_framework import status
 from .models import User
 from .serializers import UserSerializer
 from django.core.mail import send_mail
+from rest_framework.permissions import IsAuthenticated
 
 
 class UserListCreateAPI(APIView):
@@ -129,6 +130,15 @@ class UserDetailAPI(APIView):
             {"message": "User deactivated successfully"},
             status=status.HTTP_200_OK
         )
+
+class ProtectedAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({
+            "message": "JWT token verified successfully",
+            "user": request.user.email
+        })
 
 
 
