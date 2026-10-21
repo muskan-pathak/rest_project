@@ -1,5 +1,5 @@
-from datetime import timedelta # calculate otp expiry time
-import secrets # generate otp
+from datetime import timedelta 
+import secrets 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.hashers import make_password, check_password
@@ -20,13 +20,13 @@ from .serializers import (
 User = get_user_model()
 
 
-def generate_and_send_otp(user, subject, message_prefix): # generate otp save it on user and email it
+def generate_and_send_otp(user, subject, message_prefix): 
     otp = f"{secrets.randbelow(900000) + 100000}"
     now = timezone.now()
 
     user.otp_hash = make_password(otp)
-    user.otp_created_at = now # saves the time when otp created
-    user.otp_expires_at = now + timedelta(minutes=5) # otp expire time
+    user.otp_created_at = now 
+    user.otp_expires_at = now + timedelta(minutes=5) 
     user.otp_is_used = False
     user.save(update_fields=[
         "otp_hash",
@@ -44,16 +44,16 @@ def generate_and_send_otp(user, subject, message_prefix): # generate otp save it
     )
 
 
-def validate_user_otp(user, otp):    # check otp and validate it
+def validate_user_otp(user, otp):    
     if (
         not user.otp_hash
-        or not user.otp_expires_at # if expiry time is not save it cannot validate safely
+        or not user.otp_expires_at 
         or user.otp_is_used
         or user.otp_expires_at <= timezone.now()
     ):
         return False
 
-    return check_password(otp, user.otp_hash) # compare otp
+    return check_password(otp, user.otp_hash) 
 
 
 class LoginAPIView(APIView):
@@ -63,7 +63,7 @@ class LoginAPIView(APIView):
         if not serializer.is_valid():
             return Response(
                 serializer.errors,
-                status=status.HTTP_400_BAD_REQUEST, # if validation fails
+                status=status.HTTP_400_BAD_REQUEST, 
             )
 
         email = serializer.validated_data["email"]
@@ -160,8 +160,8 @@ class VerifyOTPAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user.otp_is_used = True # mark otp use
-        user.save(update_fields=["otp_is_used"]) # save it so taht cannot used again
+        user.otp_is_used = True 
+        user.save(update_fields=["otp_is_used"]) 
 
         return Response(
             {"message": "OTP verified successfully"},

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User
+from .models import User, Client
 
 class UserSerializer(serializers.ModelSerializer):
 
@@ -56,6 +56,35 @@ class UserSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class ClientSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Client
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'address',
+            'country',
+            'contact_number',
+            'email',
+            'status',
+            'created_at',
+            'created_by',
+            'modified_at',
+            'modified_by',
+        ]
+
+        read_only_fields = [
+            'id',
+            'created_at',
+            'created_by',
+            'modified_at',
+            'modified_by',
+        ]
+
 
 
 

@@ -58,6 +58,57 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+
+
+
+
+
+
+
+
+
+class Client(models.Model):
+    STATUS_CHOICES = [
+        ('Active', 'Active'),
+        ('Inactive', 'Inactive'),
+    ]
+
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    address = models.TextField()
+    country = models.CharField(max_length=100)
+    contact_number = models.CharField(max_length=15)
+    email = models.EmailField(unique=True)
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='Active'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True) # auto now automatically save kr leta h date and time at the time of creation
+    created_by = models.ForeignKey(  # relation b/W user and client model 
+        'User',                      # if i as user create a client then my reference save in client model  
+        on_delete=models.PROTECT,
+        related_name='created_clients'
+    )
+    modified_at = models.DateTimeField(auto_now=True)
+    modified_by = models.ForeignKey(
+        'User',
+        on_delete=models.PROTECT,
+        related_name='modified_clients' # help in retrieve the client modiefied by the user lastly
+    )
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+
+
+
+
+
+
             
         
 
