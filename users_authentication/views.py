@@ -1,14 +1,14 @@
-from datetime import timedelta 
-import secrets 
+from datetime import timedelta # calculate OTP expiry time
+import secrets # OTP generate
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.hashers import make_password, check_password # make_password to convert plain text password to hash, check to compare plain password to hased
 from django.core.mail import send_mail
-from django.utils import timezone
+from django.utils import timezone # to work with date and time
 from rest_framework.views import APIView
-from rest_framework.response import Response
+from rest_framework.response import Response # to return data from api 
 from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken # to create access and refresh token for user
 from .serializers import (
     LoginSerializer,
     SendOTPSerializer,

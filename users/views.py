@@ -1,4 +1,4 @@
-from django.core import paginator
+from django.core import paginator # 
 from django.db.migrations import serializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -16,17 +16,17 @@ from rest_framework.pagination import PageNumberPagination
 
 
 
-class UserListCreateAPI(APIView):   
-    permission_classes = [AllowAny]  
-    def get(self, request):  
-        users = User.objects.filter(status='Active') 
+class UserListCreateAPI(APIView): # this is for creating users and listing all users
+    permission_classes = [AllowAny]  # this for allowing any user to acess this view
+    def get(self, request):  # list all active users
+        users = User.objects.filter(status='Active') # ensuring only active users
         paginator = PageNumberPagination()
         paginated_users = paginator.paginate_queryset(users, request)
         serializer = UserSerializer(paginated_users, many=True)
         return paginator.get_paginated_response(serializer.data)
 
     
-    def post(self, request):
+    def post(self, request): # this for creating new user and send welcome email after craetion
         serializer = UserSerializer(data=request.data)
 
         if serializer.is_valid():
@@ -70,7 +70,7 @@ class UserDetailAPI(APIView):
             return None
 
     def get(self, request, pk):
-        user = self.get_user(pk)  
+        user = self.get_user(pk)  # find active user by primary key
 
         if user is None:
             return Response(
@@ -101,7 +101,7 @@ class UserDetailAPI(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    def patch(self, request, pk):  
+    def patch(self, request, pk):  # update partial data 
         user = self.get_user(pk)
 
         if user is None:
@@ -134,7 +134,7 @@ class UserDetailAPI(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        user.status = 'Inactive' 
+        user.status = 'Inactive' # mark user as inactive not deete it
         user.save(update_fields=['status'])
 
         return Response(
@@ -146,15 +146,13 @@ class UserDetailAPI(APIView):
 class ClientListCreateAPI(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request): 
-        clients = Client.objects.filter(status='Active') 
+    def get(self, request): # to get the list of clients
+        clients = Client.objects.filter(status='Active') # only active satus clients
         paginator = PageNumberPagination()
         paginated_clients = paginator.paginate_queryset(clients, request)
         serializer = ClientSerializer(paginated_clients, many=True)
         return paginator.get_paginated_response(serializer.data)
-        # serializer = ClientSerializer(clients, many=True)
-
-        # return Response(serializer.data, status=status.HTTP_200_OK)
+       
 
     def post(self, request): 
         serializer = ClientSerializer(data=request.data)
@@ -219,7 +217,7 @@ class ClientDetailAPI(APIView):
         )
 
    
-    def patch(self, request, pk):
+    def patch(self, request, pk): # update partial data of client
         client = self.get_client(pk)
 
         if client is None:
@@ -263,6 +261,9 @@ class ClientDetailAPI(APIView):
             {"message": "Client deactivated successfully"},
             status=status.HTTP_200_OK
         )
+
+
+
 
 
 
