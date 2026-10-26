@@ -1,64 +1,19 @@
-# from django.core import paginator
-# from django.db.migrations import serializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from datetime import timedelta
-import secrets
 from django.contrib.auth import authenticate
-from django.contrib.auth.hashers import make_password, check_password
-from django.utils import timezone
 from rest_framework import status
-from django.contrib.auth import authenticate, get_user_model
-# from rest_framework import request, status
-
-# import users
 from .models import User,Client
-from .serializers import UserSerializer,ClientSerializer, LoginSerializer,SendOTPSerializer, VerifyOTPSerializer,ForgotPasswordSerializer,ResetPasswordSerializer
-    
+from .serializers import UserSerializer,ClientSerializer, LoginSerializer,SendOTPSerializer, VerifyOTPSerializer,ForgotPasswordSerializer,ResetPasswordSerializer 
 from django.core.mail import send_mail
 from rest_framework.permissions import IsAuthenticated,AllowAny
 from django.conf import settings
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
-
-def generate_and_send_otp(user, subject, message_prefix): 
-    otp = f"{secrets.randbelow(900000) + 100000}"
-    now = timezone.now()
-
-    user.otp_hash = make_password(otp)
-    user.otp_created_at = now 
-    user.otp_expires_at = now + timedelta(minutes=5) 
-    user.otp_is_used = False
-    user.save(update_fields=[
-        "otp_hash",
-        "otp_created_at",
-        "otp_expires_at",
-        "otp_is_used",
-    ])
-
-    send_mail(
-        subject=subject,
-        message=f"{message_prefix}{otp}. It expires in 5 minutes.",
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
-    )
-
-
-def validate_user_otp(user, otp):    
-    if (
-        not user.otp_hash
-        or not user.otp_expires_at 
-        or user.otp_is_used
-        or user.otp_expires_at <= timezone.now()
-    ):
-        return False
-
-    return check_password(otp, user.otp_hash) 
-
-
-
-
+from .utils import generate_and_send_otp, validate_user_otp
+from django.utils import timezone
+from datetime import timedelta
+from rest_framework.exceptions import ValidationError
+from .utils import send_limited_otp
 
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
     permission_classes = [AllowAny]  # this for allowing any user to acess this view
@@ -91,8 +46,6 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-
-
             return Response(
                 UserSerializer(user).data,
                 status=status.HTTP_201_CREATED 
@@ -101,9 +54,7 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST 
-        )
-   
-
+        )  
 class UserDetailAPI(APIView):
     permission_classes = [AllowAny]
 
@@ -186,9 +137,6 @@ class UserDetailAPI(APIView):
             status=status.HTTP_200_OK
         )
 
-
-
-
 class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -241,31 +189,33 @@ class SendOTPAPIView(APIView):
         if not serializer.is_valid():
             return Response(
                 serializer.errors,
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         email = serializer.validated_data["email"]
 
         try:
-            user = User.objects.get(email=email, status="Active")
+            user = User.objects.get(
+                email=email,
+                status="Active"
+            )
         except User.DoesNotExist:
             return Response(
                 {"error": "No active user found with this email"},
-                status=status.HTTP_404_NOT_FOUND,
+                status=status.HTTP_404_NOT_FOUND
             )
 
-        generate_and_send_otp(
+        send_limited_otp(
             user,
             "Your OTP Code",
-            "Your OTP is ",
+            "Your OTP is "
         )
 
         return Response(
             {"message": "OTP sent successfully to your email"},
-            status=status.HTTP_200_OK,
+            status=status.HTTP_200_OK
         )
-
-
+    
 class VerifyOTPAPIView(APIView):
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
@@ -301,7 +251,6 @@ class VerifyOTPAPIView(APIView):
             status=status.HTTP_200_OK,
         )
 
-
 class ForgotPasswordAPIView(APIView):
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
@@ -309,29 +258,33 @@ class ForgotPasswordAPIView(APIView):
         if not serializer.is_valid():
             return Response(
                 serializer.errors,
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         email = serializer.validated_data["email"]
 
         try:
-            user = User.objects.get(email=email, status="Active")
+            user = User.objects.get(
+                email=email,
+                status="Active"
+            )
         except User.DoesNotExist:
             return Response(
                 {"error": "No active user found with this email"},
-                status=status.HTTP_404_NOT_FOUND,
+                status=status.HTTP_404_NOT_FOUND
             )
 
-        generate_and_send_otp(
+        send_limited_otp(
             user,
             "Password Reset OTP",
-            "Your password reset OTP is ",
+            "Your password reset OTP is "
         )
 
         return Response(
             {"message": "Password reset OTP sent successfully"},
-            status=status.HTTP_200_OK,
+            status=status.HTTP_200_OK
         )
+
 
 
 class ResetPasswordAPIView(APIView):

@@ -2,7 +2,8 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 
 class User(AbstractUser):
-    email = models.EmailField(unique = True)
+    email = models.EmailField(unique = True, null=True, blank=True)
+    user_name = models.CharField(unique= True, null = True, blank = True)
 
     Profile_Choices = [
             ('Administrator', 'Administrator'),
@@ -35,26 +36,28 @@ class User(AbstractUser):
         ('Inactive', 'Inactive'),
 
     ]
-    profiles = models.CharField(max_length=20, choices=Profile_Choices, default='Standard')
+    profiles = models.CharField(max_length=20, choices=Profile_Choices, default='Standard', null=True,
+        blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
-    gender = models.CharField(max_length=12, choices=gender_choices, blank = True)
-    nationality = models.CharField(max_length=100, blank=True)
+    gender = models.CharField(max_length=12, choices=gender_choices, blank = True, null= True)
+    nationality = models.CharField(max_length=100, blank=True, null=True)
     image = models.ImageField(upload_to='profile_images/',null=True, blank=True)
-    blood_group = models.CharField(max_length=3, choices= Blood_Group_Choices, blank=True)
-    phone = models.CharField(max_length=15, blank=True)
-    permanent_address = models.TextField(blank=True)
-    current_address = models.TextField(blank=True)
-    emergency_contact_name = models.CharField(max_length=100, blank=True)
-    emergency_contact_number = models.CharField(max_length=15, blank=True)
-    emergency_contact_relationship = models.CharField(max_length=50, blank=True)
-    status = models.CharField(max_length=10, choices=Status_Choices, default='Active')
+    blood_group = models.CharField(max_length=3, choices= Blood_Group_Choices, blank=True,null=True)
+    phone = models.CharField(max_length=15, blank=True, null=True)
+    permanent_address = models.TextField(blank=True, null= True)
+    current_address = models.TextField(blank=True,null=True)
+    emergency_contact_name = models.CharField(max_length=100, blank=True,null=True)
+    emergency_contact_number = models.CharField(max_length=15, blank=True,null=True)
+    emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
+    # password = models.CharField(max_length=8,blank=True, null=True)
+    status = models.CharField(max_length=10, choices=Status_Choices, default='Active',blank=True, null=True)
     otp_hash = models.CharField(max_length=128, blank=True, null=True) 
     otp_created_at = models.DateTimeField(null=True, blank=True)
     otp_expires_at = models.DateTimeField(null=True, blank=True)
-    otp_is_used = models.BooleanField(default=False)
-
-
-
+    otp_is_used = models.BooleanField(default=False,null=True, blank=True)
+    otp_request_count = models.PositiveIntegerField(default=0,null=True, blank=True)
+    otp_request_window_start = models.DateTimeField(null= True, blank = True)
+    otp_blocked_until = models.DateTimeField(null= True, blank= True)
 
     def __str__(self):
         return self.email
@@ -74,28 +77,30 @@ class Client(models.Model):
         ('Inactive', 'Inactive'),
     ]
 
-    first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
-    address = models.TextField()
-    country = models.CharField(max_length=100)
-    contact_number = models.CharField(max_length=15)
-    email = models.EmailField(unique=True)
+    first_name = models.CharField(max_length=100, null= True, blank= True)
+    last_name = models.CharField(max_length=100, null= True, blank= True)
+    address = models.TextField(null= True, blank= True)
+    country = models.CharField(max_length=100, null= True, blank= True)
+    contact_number = models.CharField(max_length=15, null= True, blank= True)
+    email = models.EmailField(unique=True,null=True, blank=True)
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
-        default='Active'
+        default='Active',
+        null=True, blank=True
     )
 
-    created_at = models.DateTimeField(auto_now_add=True) # auto now automatically save kr leta h date and time at the time of creation
+    created_at = models.DateTimeField(auto_now_add=True,null=True, blank=True) # auto now automatically save kr leta h date and time at the time of creation
     created_by = models.ForeignKey(  # relation b/W user and client model 
-        'User',                      # if i as user create a client then my reference save in client model  
+        'User',                      # if i as a user create a client then my reference save in client model  
         on_delete=models.PROTECT,
-        related_name='created_clients'
+        related_name='created_clients',
+        null=True, blank=True
     )
-    modified_at = models.DateTimeField(auto_now=True)
+    modified_at = models.DateTimeField(auto_now=True,null=True, blank=True)
     modified_by = models.ForeignKey(
         'User',
-        on_delete=models.PROTECT,
+        on_delete=models.PROTECT,null=True, blank=True,
         related_name='modified_clients' # help in retrieve the client modiefied by the user lastly
     )
 

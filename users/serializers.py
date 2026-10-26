@@ -2,10 +2,12 @@ from rest_framework import serializers
 from .models import User, Client
 
 class UserSerializer(serializers.ModelSerializer):
-    profiles = serializers.CharField()
-    gender = serializers.CharField()
-    blood_group = serializers.CharField()
-    status = serializers.CharField()
+    profiles = serializers.CharField(required=False,allow_blank=True,allow_null=True)
+    gender = serializers.CharField(required=False,allow_blank=True,allow_null=True)
+    blood_group = serializers.CharField( required=False,allow_blank=True,allow_null=True)
+    status = serializers.CharField(required=False,allow_blank=True,allow_null=True)
+    user_name = serializers.CharField(required=False,allow_blank=True,allow_null=True)
+    # password = serializers.CharField(required=False,allow_blank=True,allow_null=True)
 
     class Meta:
         model = User
@@ -13,7 +15,7 @@ class UserSerializer(serializers.ModelSerializer):
             'id',
             'first_name',
             'last_name',
-            'username',
+            'user_name',
             'email',
             'password',
             'profiles',
@@ -29,60 +31,64 @@ class UserSerializer(serializers.ModelSerializer):
             'emergency_contact_number',
             'emergency_contact_relationship',
             'status',
-        ]
-
-
+        ] 
         extra_kwargs = {
-            'password': {
-                'write_only': True,
-                'required': True,
-                'min_length': 8,
-            },
-            'email': {
-                'required': True,
-            },
-        }
-
+        'email': {
+            'required': True,
+            'allow_blank': False,
+        },
+         'password': {
+        'required': False,
+        'write_only': True,
+    },
+    }
     
-    def normalize_choice(self, value, choices, field_name):
-        if not isinstance(value, str):
-            return value
+    
+    # def normalize_choice(self, value, choices, field_name):
+    #     if not isinstance(value, str):
+    #         return value
 
-        value = value.strip().casefold()
+    #     value = value.strip().casefold()
 
-        for choice_value, choice_label in choices:
-            if value == choice_value.casefold():
-                return choice_value
+    #     for choice_value, choice_label in choices:
+    #         if value == choice_value.casefold():
+    #             return choice_value
 
-        raise serializers.ValidationError({
-            field_name: "Invalid choice."
-        })
+    #     raise serializers.ValidationError({
+    #         field_name: "Invalid choice."
+    #     })
 
-    def validate_status(self, value):
-        return self.normalize_choice(
-            value, User.Status_Choices, "status"
-        )
+    # def validate_status(self, value):
+    #     return self.normalize_choice(
+    #         value, User.Status_Choices, "status"
+    #     )
 
-    def validate_gender(self, value):
-        return self.normalize_choice(
-            value, User.gender_choices, "gender"
-        )
+    # def validate_gender(self, value):
+    #     return self.normalize_choice(
+    #         value, User.gender_choices, "gender"
+    #     )
 
-    def validate_blood_group(self, value):
-        return self.normalize_choice(
-            value, User.Blood_Group_Choices, "blood_group"
-        )
+    # def validate_blood_group(self, value):
+    #     return self.normalize_choice(
+    #         value, User.Blood_Group_Choices, "blood_group"
+    #     )
 
-    def validate_profiles(self, value):
-        return self.normalize_choice(
-            value, User.Profile_Choices, "profiles"
-        )
+    # def validate_profiles(self, value):
+    #     return self.normalize_choice(
+    #         value, User.Profile_Choices, "profiles"
+    #     )
 
 
+    # def create(self, validated_data):
+    #     password = validated_data.pop('password')
+    #     user = User(**validated_data)
+    #     user.set_password(password)
+    #     user.save()
+    #     return user
     def create(self, validated_data):
-        password = validated_data.pop('password')
+        validated_data.pop('password', None)
         user = User(**validated_data)
-        user.set_password(password)
+        user.set_unusable_password()
         user.save()
         return user
 
@@ -133,9 +139,10 @@ class ResetPasswordSerializer(serializers.Serializer):
         trim_whitespace=False
     )
 
-
 class ClientSerializer(serializers.ModelSerializer):
-    status = serializers.CharField()
+    email = serializers.EmailField(
+        required=True, allow_blank=False, allow_null=False
+    )
 
     class Meta:
         model = Client
@@ -161,9 +168,8 @@ class ClientSerializer(serializers.ModelSerializer):
             'modified_at',
             'modified_by',
         ]
-    
+
     def validate_status(self, value):
-        print("CLIENT VALIDATE STATUS CALLED:", value)
         if not isinstance(value, str):
             return value
 
@@ -176,6 +182,7 @@ class ClientSerializer(serializers.ModelSerializer):
         raise serializers.ValidationError(
             "Status must be Active or Inactive."
         )
+
 
 
 
