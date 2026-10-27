@@ -90,3 +90,18 @@ def send_limited_otp(user, subject, message):
         "otp_blocked_until",
     ])
 
+
+def generate_unique_username(email):
+    """Build a unique username from the part of the email before '@'."""
+    from .models import User
+
+    base = email.split("@")[0][:140]
+    username = base
+    counter = 1
+
+    while User.objects.filter(username__iexact=username).exists():
+        username = f"{base}{counter}"
+        counter += 1
+
+    return username
+

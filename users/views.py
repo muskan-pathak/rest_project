@@ -2,17 +2,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.contrib.auth import authenticate
 from rest_framework import status
-from .models import User,Client
-from .serializers import UserSerializer,ClientSerializer, LoginSerializer,SendOTPSerializer, VerifyOTPSerializer,ForgotPasswordSerializer,ResetPasswordSerializer 
+from .models import User,Client,Project
+from .serializers import UserSerializer,ClientSerializer, LoginSerializer,SendOTPSerializer, VerifyOTPSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,ProjectSerializer
 from django.core.mail import send_mail
 from rest_framework.permissions import IsAuthenticated,AllowAny
 from django.conf import settings
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
-from .utils import generate_and_send_otp, validate_user_otp
-from django.utils import timezone
-from datetime import timedelta
-from rest_framework.exceptions import ValidationError
+from .utils import validate_user_otp
 from .utils import send_limited_otp
 
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
@@ -444,6 +441,118 @@ class ClientDetailAPI(APIView):
             status=status.HTTP_200_OK
         )
 
+class ProjectListCreateAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request): # for listt of project
+        # Inactive project nhi dikhenge
+        projects = Project.objects.exclude(project_status='Inactive').order_by('-id')
+        paginator = PageNumberPagination()
+        paginated_projects = paginator.paginate_queryset(projects, request)
+        serializer = ProjectSerializer(paginated_projects, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def post(self, request):  # if you want to create new project
+        serializer = ProjectSerializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save(
+                created_by=request.user,
+                modified_by=request.user
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProjectDetailAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_project(self, pk):
+        try:
+            # only active project get 
+            return Project.objects.exclude(project_status='Inactive').get(pk=pk)
+        except Project.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        project = self.get_project(pk)
+
+        if project is None:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProjectSerializer(project)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request, pk):  # poora update krna h if
+        project = self.get_project(pk)
+
+        if project is None:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProjectSerializer(project, data=request.data)
+
+        if serializer.is_valid():
+            serializer.save(modified_by=request.user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):  # partial update krna h
+        project = self.get_project(pk)
+
+        if project is None:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProjectSerializer(project, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save(modified_by=request.user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):  # for soft delete
+        project = self.get_project(pk)
+
+        if project is None:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        project.project_status = 'Inactive'
+        project.modified_by = request.user
+        project.save(update_fields=['project_status', 'modified_at', 'modified_by'])
+
+        return Response({"message": "Project deactivated successfully"}, status=status.HTTP_200_OK)
+
+# class ProjectTypeListAPI(APIView): # project type default + new types of database
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         types = []
+
+#         # Pehle 4 default types
+#         for option, _label in Project.PROJECT_TYPE_CHOICE:
+#             types.append(option)
+
+#         # Phir database mein saved types (Inactive projects ke types nahi)
+#         saved_types = (
+#             Project.objects.exclude(project_status='Inactive')
+#             .exclude(project_type__isnull=True)
+#             .exclude(project_type='')
+#             .values_list('project_type', flat=True)
+#             .distinct()
+#         )
+
+#         # Jo type pehle se list mein hai (case-insensitive), use dobara nahi daalna
+#         for saved in saved_types:
+#             already_there = False
+#             for t in types:
+#                 if t.casefold() == saved.casefold():
+#                     already_there = True
+#             if not already_there:
+#                 types.append(saved)
+
+#         return Response(types, status=status.HTTP_200_OK)
 
 
 

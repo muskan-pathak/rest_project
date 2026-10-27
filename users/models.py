@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractUser
 
 class User(AbstractUser):
     email = models.EmailField(unique = True, null=True, blank=True)
-    user_name = models.CharField(unique= True, null = True, blank = True)
+    user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
 
     Profile_Choices = [
             ('Administrator', 'Administrator'),
@@ -36,7 +36,7 @@ class User(AbstractUser):
         ('Inactive', 'Inactive'),
 
     ]
-    profiles = models.CharField(max_length=20, choices=Profile_Choices, default='Standard', null=True,
+    profiles = models.CharField(max_length=20, default='Standard', null=True,
         blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=12, choices=gender_choices, blank = True, null= True)
@@ -49,7 +49,7 @@ class User(AbstractUser):
     emergency_contact_name = models.CharField(max_length=100, blank=True,null=True)
     emergency_contact_number = models.CharField(max_length=15, blank=True,null=True)
     emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
-    # password = models.CharField(max_length=8,blank=True, null=True)
+    password = models.CharField("password", max_length=128, null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status_Choices, default='Active',blank=True, null=True)
     otp_hash = models.CharField(max_length=128, blank=True, null=True) 
     otp_created_at = models.DateTimeField(null=True, blank=True)
@@ -110,6 +110,42 @@ class Client(models.Model):
 
 
 
+
+
+class Project(models.Model):
+    PROJECT_TYPE_CHOICE = [
+        ('Web Development','Web Development'),
+        ('Mobile App', 'Mobile App'),
+        ('Software', 'Software'),
+        ('Design','Design'),
+    ]
+    PROJECT_STATUS_CHOICES = [
+        ('Active', 'Active'),
+        ('Inactive', 'Inactive'),
+        ('Pending', 'Pending'),
+        ('In Progress', 'In Progress'),
+        ('Completed', 'Completed'),
+    ]
+    project_title = models.CharField(max_length= 100,null=True, blank=True)
+    project_type = models.CharField(max_length=50,null=True, blank=True)
+    date_of_completion = models.DateField(null=True, blank=True)
+    project_status = models.CharField(max_length=20,choices=PROJECT_STATUS_CHOICES,default='In Progress',
+        null=True, blank=True)
+    
+    client = models.ForeignKey( # project kis client ke liye h
+        'Client',on_delete=models.PROTECT,related_name='projects',null=True, blank=True)
+    manager = models.ForeignKey( # project ka manager (in user)
+        'User',on_delete=models.PROTECT,related_name='managed_projects',null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    created_by = models.ForeignKey('User', on_delete=models.PROTECT, related_name='created_projects',
+        null=True, blank=True)
+    modified_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    modified_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='modified_projects',
+        null=True, blank=True)
+    
+
+    def __str__(self):
+        return f"{self.project_title}"
 
 
 
