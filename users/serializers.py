@@ -49,8 +49,6 @@ class UserSerializer(serializers.ModelSerializer):
         for option, _label in User.Profile_Choices: # for case insensitivity like developer becomes Developer
             if value.casefold() == option.casefold():
                 return option
-
-        # Any other value like if we write intern or a manager is accepted 
         return value
 
 

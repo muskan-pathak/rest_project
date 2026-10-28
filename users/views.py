@@ -30,7 +30,7 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
             try:
                 send_mail(
                 subject='Welcome to Our Platform',
-                message=f'Hello {user.first_name}, your account has been created successfully.',
+                message=f'Hello {user.first_name}, your account created successfully.',
                 from_email=settings.DEFAULT_FROM_EMAIL,  
                 recipient_list=[user.email],
                 fail_silently=False,

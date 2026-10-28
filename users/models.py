@@ -4,6 +4,8 @@ from django.contrib.auth.models import AbstractUser
 class User(AbstractUser):
     email = models.EmailField(unique = True, null=True, blank=True)
     user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
+    first_name = models.CharField(max_length=100,null = True, blank = True)
+    last_name = models.CharField(max_length=100,null = True, blank = True)
 
     Profile_Choices = [
             ('Administrator', 'Administrator'),
@@ -15,9 +17,7 @@ class User(AbstractUser):
     gender_choices = [
         ('Male', 'Male'),
         ('Female', 'Female'),
-        ('Other', 'Other'),
-
-    ]
+        ('Other', 'Other'),]
 
     Blood_Group_Choices = [
         ('A+', 'A+'),
@@ -27,17 +27,14 @@ class User(AbstractUser):
         ('AB+', 'AB+'),
         ('AB-', 'AB-'),
         ('O+', 'O+'),
-        ('O-', 'O-'),
-    ]
-                
+        ('O-', 'O-'),]          
 
     Status_Choices = [
         ('Active', 'Active'),
-        ('Inactive', 'Inactive'),
+        ('Inactive', 'Inactive'),]
 
-    ]
-    profiles = models.CharField(max_length=20, default='Standard', null=True,
-        blank=True)
+    
+    profiles = models.CharField(max_length=20, default='Standard', null=True,blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=12, choices=gender_choices, blank = True, null= True)
     nationality = models.CharField(max_length=100, blank=True, null=True)
@@ -63,20 +60,10 @@ class User(AbstractUser):
         return self.email
 
 
-
-
-
-
-
-
-
-
 class Client(models.Model):
     STATUS_CHOICES = [
         ('Active', 'Active'),
-        ('Inactive', 'Inactive'),
-    ]
-
+        ('Inactive', 'Inactive'),]
     first_name = models.CharField(max_length=100, null= True, blank= True)
     last_name = models.CharField(max_length=100, null= True, blank= True)
     address = models.TextField(null= True, blank= True)
@@ -92,15 +79,13 @@ class Client(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True,null=True, blank=True) # auto now automatically save kr leta h date and time at the time of creation
     created_by = models.ForeignKey(  # relation b/W user and client model 
-        'User',                      # if i as a user create a client then my reference save in client model  
-        on_delete=models.PROTECT,
+        'User',on_delete=models.PROTECT,         # if i as a user create a client then my reference save in client model  
         related_name='created_clients',
         null=True, blank=True
     )
     modified_at = models.DateTimeField(auto_now=True,null=True, blank=True)
     modified_by = models.ForeignKey(
-        'User',
-        on_delete=models.PROTECT,null=True, blank=True,
+        'User',on_delete=models.PROTECT,null=True, blank=True,
         related_name='modified_clients' # help in retrieve the client modiefied by the user lastly
     )
 
@@ -109,27 +94,24 @@ class Client(models.Model):
 
 
 
-
-
-
 class Project(models.Model):
     PROJECT_TYPE_CHOICE = [
         ('Web Development','Web Development'),
         ('Mobile App', 'Mobile App'),
         ('Software', 'Software'),
-        ('Design','Design'),
-    ]
+        ('Design','Design'),]
+    
     PROJECT_STATUS_CHOICES = [
         ('Active', 'Active'),
         ('Inactive', 'Inactive'),
         ('Pending', 'Pending'),
         ('In Progress', 'In Progress'),
-        ('Completed', 'Completed'),
-    ]
+        ('Completed', 'Completed'),]
+    
     project_title = models.CharField(max_length= 100,null=True, blank=True)
     project_type = models.CharField(max_length=50,null=True, blank=True)
     date_of_completion = models.DateField(null=True, blank=True)
-    project_status = models.CharField(max_length=20,choices=PROJECT_STATUS_CHOICES,default='In Progress',
+    project_status = models.CharField(max_length=42,choices=PROJECT_STATUS_CHOICES,default='In Progress',
         null=True, blank=True)
     
     client = models.ForeignKey( # project kis client ke liye h
