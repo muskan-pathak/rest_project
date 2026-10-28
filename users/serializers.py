@@ -196,7 +196,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     
 
     def validate(self, attrs):
-        required_fields = ['project_title', 'project_type', 'client', 'manager']
+        required_fields = ['project_title', 'project_type','manager']
 
         for field in required_fields:
             if self.instance is not None and field not in attrs:
