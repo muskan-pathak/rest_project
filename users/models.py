@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
+
 class User(AbstractUser):
     email = models.EmailField(unique = True, null=True, blank=True)
     user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
@@ -34,7 +35,7 @@ class User(AbstractUser):
         ('Inactive', 'Inactive'),]
 
     
-    profiles = models.CharField(max_length=20, default='Standard', null=True,blank=True)
+    profiles = models.CharField(max_length=52,choices=Profile_Choices,default='Standard',null=True,blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=12, choices=gender_choices, blank = True, null= True)
     nationality = models.CharField(max_length=100, blank=True, null=True)
