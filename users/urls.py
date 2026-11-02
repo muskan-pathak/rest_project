@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import UserListCreateAPI, UserDetailAPI, LoginAPIView, SendOTPAPIView,VerifyOTPAPIView, ForgotPasswordAPIView, ResetPasswordAPIView, ClientListCreateAPI,ClientDetailAPI,ProjectListCreateAPI, ProjectDetailAPI
-
+from .views import (UserListCreateAPI,UserDetailAPI,LoginAPIView,SendOTPAPIView,VerifyOTPAPIView,ForgotPasswordAPIView,ResetPasswordAPIView,
+ClientListCreateAPI, ClientDetailAPI,ProjectListCreateAPI,ProjectDetailAPI,ProfileListCreateView,
+ProfileDetailView,ProfileUsersByIdView,ProfileUsersByNameView,InactiveRecordsAPI,RestoreRecordAPI,)  
 
 urlpatterns = [
     path('users/', UserListCreateAPI.as_view(), name='user-list-create'),
@@ -13,11 +14,24 @@ urlpatterns = [
     path('clients/', ClientListCreateAPI.as_view(), name='client-list-create'),
     path('clients/<int:pk>/', ClientDetailAPI.as_view(), name='client-detail'),
     path('projects/', ProjectListCreateAPI.as_view(), name='project-list-create'),
-    # path('projects/types/', ProjectTypeListAPI.as_view(), name='project-types'),
     path('projects/<int:pk>/', ProjectDetailAPI.as_view(), name='project-detail'),
-
-
+    path('profiles/', ProfileListCreateView.as_view(), name='profile-list-create'),
+    path('profiles/by-name/<str:profile_name>/users/', ProfileUsersByNameView.as_view(), name='profile-users-by-name'),
+    path('profiles/<int:profile_id>/users/', ProfileUsersByIdView.as_view(), name='profile-users-by-id'),
+    path('profiles/<int:pk>/', ProfileDetailView.as_view(), name='profile-detail'),
+    path('projects/<int:pk>/attachments/<int:attachment_id>/',ProjectDetailAPI.as_view(),
+    name='project-attachment-delete'),
+    path('inactive-records/',InactiveRecordsAPI.as_view(),name='inactive-records'),
+    path('restore/<str:record_type>/<int:pk>/',RestoreRecordAPI.as_view(),name='restore-record'),
 ]
+   
+
+
+
+
+
+
+
 
 
 

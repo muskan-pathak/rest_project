@@ -1,16 +1,20 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.contrib.auth import authenticate
-from rest_framework import status
-from .models import User,Client,Project
-from .serializers import UserSerializer,ClientSerializer, LoginSerializer,SendOTPSerializer, VerifyOTPSerializer,ForgotPasswordSerializer,ResetPasswordSerializer,ProjectSerializer
-from django.core.mail import send_mail
-from rest_framework.permissions import IsAuthenticated,AllowAny
 from django.conf import settings
+from django.contrib.auth import authenticate
+from django.core.mail import send_mail
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.db import transaction
+from rest_framework import generics, status
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from .utils import validate_user_otp
-from .utils import send_limited_otp
+from .models import User, Client, Project, ProjectAttachment, Profile
+from .serializers import (UserSerializer,ClientSerializer,LoginSerializer,SendOTPSerializer,VerifyOTPSerializer,
+ForgotPasswordSerializer,ResetPasswordSerializer,ProjectSerializer,ProjectAttachmentSerializer,ProfileSerializer,)
+from .utils import validate_user_otp, send_limited_otp
 
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
     permission_classes = [AllowAny]  # this for allowing any user to acess this view
@@ -202,12 +206,7 @@ class SendOTPAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        send_limited_otp(
-            user,
-            "Your OTP Code",
-            "Your OTP is "
-        )
-
+        send_limited_otp(user,"Your OTP Code","Your OTP is ")
         return Response(
             {"message": "OTP sent successfully to your email"},
             status=status.HTTP_200_OK
@@ -419,8 +418,6 @@ class ClientDetailAPI(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-
-    
     def delete(self, request, pk):
         client = self.get_client(pk)
 
@@ -433,7 +430,7 @@ class ClientDetailAPI(APIView):
         client.status = 'Inactive'
         client.modified_by = request.user
         client.save(
-            update_fields=['status', 'modified_at', 'modified_by']
+            update_fields=['status', 'modified_by', 'modified_at']
         )
 
         return Response(
@@ -441,37 +438,75 @@ class ClientDetailAPI(APIView):
             status=status.HTTP_200_OK
         )
 
+
 class ProjectListCreateAPI(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
-    def get(self, request): # for listt of project
-        # Inactive project nhi dikhenge
-        projects = Project.objects.exclude(project_status='Inactive').order_by('-id')
+    def get_queryset(self):
+        return (
+            Project.objects
+            .filter(is_deleted=False)
+            .exclude(project_status='Inactive')
+            .prefetch_related('attachments')
+            .order_by('-id')
+        )
+
+    def get(self, request):
+        projects = self.get_queryset()
+
         paginator = PageNumberPagination()
         paginated_projects = paginator.paginate_queryset(projects, request)
-        serializer = ProjectSerializer(paginated_projects, many=True)
+
+        serializer = ProjectSerializer(
+            paginated_projects,
+            many=True,
+            context={'request': request}
+        )
+
         return paginator.get_paginated_response(serializer.data)
 
-    def post(self, request):  # if you want to create new project
-        serializer = ProjectSerializer(data=request.data)
+    @transaction.atomic
+    def post(self, request):
+        serializer = ProjectSerializer(
+            data=request.data,
+            context={'request': request}
+        )
 
         if serializer.is_valid():
-            serializer.save(
-                created_by=request.user,
-                modified_by=request.user
-            )
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            project = serializer.save()
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            response_serializer = ProjectSerializer(
+                project,
+                context={'request': request}
+            )
+
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 class ProjectDetailAPI(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        return (
+            Project.objects
+            .filter(is_deleted=False)
+            .exclude(project_status='Inactive')
+            .prefetch_related('attachments')
+        )
 
     def get_project(self, pk):
         try:
-            # only active project get 
-            return Project.objects.exclude(project_status='Inactive').get(pk=pk)
+            return self.get_queryset().get(pk=pk)
         except Project.DoesNotExist:
             return None
 
@@ -479,80 +514,344 @@ class ProjectDetailAPI(APIView):
         project = self.get_project(pk)
 
         if project is None:
-            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'Project not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        serializer = ProjectSerializer(project)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        serializer = ProjectSerializer(
+            project,
+            context={'request': request}
+        )
 
-    def put(self, request, pk):  # poora update krna h if
+        return Response(serializer.data)
+
+    @transaction.atomic
+    def put(self, request, pk):
         project = self.get_project(pk)
 
         if project is None:
-            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'Project not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        serializer = ProjectSerializer(project, data=request.data)
+        serializer = ProjectSerializer(
+            project,
+            data=request.data,
+            context={'request': request}
+        )
 
         if serializer.is_valid():
-            serializer.save(modified_by=request.user)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            project = serializer.save()
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            response_serializer = ProjectSerializer(
+                project,
+                context={'request': request}
+            )
 
-    def patch(self, request, pk):  # partial update krna h
+            return Response(response_serializer.data)
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    @transaction.atomic
+    def patch(self, request, pk):
         project = self.get_project(pk)
 
         if project is None:
-            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'Project not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        serializer = ProjectSerializer(project, data=request.data, partial=True)
+        serializer = ProjectSerializer(
+            project,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
 
         if serializer.is_valid():
-            serializer.save(modified_by=request.user)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            project = serializer.save()
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            response_serializer = ProjectSerializer(
+                project,
+                context={'request': request}
+            )
 
-    def delete(self, request, pk):  # for soft delete
+            return Response(response_serializer.data)
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def delete(self, request, pk, attachment_id=None):
+
+    # Individual attachment delete
+        if attachment_id is not None:
+            project = self.get_project(pk)
+
+            if project is None:
+                return Response(
+                    {'error': 'Project not found.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            try:
+                attachment = project.attachments.get(id=attachment_id)
+            except ProjectAttachment.DoesNotExist:
+                return Response(
+                    {'error': 'Attachment not found in this project.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            attachment.delete()
+
+            return Response(
+                {'message': 'Attachment deleted successfully.'},
+                status=status.HTTP_200_OK
+            )
+
+        # Project soft delete
         project = self.get_project(pk)
 
         if project is None:
-            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'Project not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        project.project_status = 'Inactive'
+        project.is_deleted = True
+        project.deleted_at = timezone.now()
         project.modified_by = request.user
-        project.save(update_fields=['project_status', 'modified_at', 'modified_by'])
 
-        return Response({"message": "Project deactivated successfully"}, status=status.HTTP_200_OK)
+        project.save(
+            update_fields=[
+                'is_deleted',
+                'deleted_at',
+                'modified_by',
+                'modified_at'
+            ]
+        )
 
-# class ProjectTypeListAPI(APIView): # project type default + new types of database
-#     permission_classes = [IsAuthenticated]
+        return Response(
+            {'message': 'Project deleted successfully.'},
+            status=status.HTTP_200_OK
+        )
+class ProfileListCreateView(generics.ListCreateAPIView):
+    queryset = Profile.objects.all().order_by('id')
+    serializer_class = ProfileSerializer
+    permission_classes = [AllowAny]
 
-#     def get(self, request):
-#         types = []
 
-#         # Pehle 4 default types
-#         for option, _label in Project.PROJECT_TYPE_CHOICE:
-#             types.append(option)
+class ProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Profile.objects.all()
+    serializer_class = ProfileSerializer
+    permission_classes = [AllowAny]
 
-#         # Phir database mein saved types (Inactive projects ke types nahi)
-#         saved_types = (
-#             Project.objects.exclude(project_status='Inactive')
-#             .exclude(project_type__isnull=True)
-#             .exclude(project_type='')
-#             .values_list('project_type', flat=True)
-#             .distinct()
-#         )
+    def update(self, request, *args, **kwargs):
+        profile = self.get_object()
 
-#         # Jo type pehle se list mein hai (case-insensitive), use dobara nahi daalna
-#         for saved in saved_types:
-#             already_there = False
-#             for t in types:
-#                 if t.casefold() == saved.casefold():
-#                     already_there = True
-#             if not already_there:
-#                 types.append(saved)
+        if profile.is_default:
+            return Response(
+                {"message": "System profiles cannot be updated."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-#         return Response(types, status=status.HTTP_200_OK)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        profile = self.get_object()
+
+        if profile.is_default:
+            return Response(
+                {"message": "System profiles cannot be updated."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return super().partial_update(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        profile = self.get_object()
+
+        if profile.is_default:
+            return Response(
+                {"message": "System profiles cannot be deleted."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        profile.delete()
+
+        return Response(
+            {"message": "Profile deleted successfully."},
+            status=status.HTTP_200_OK
+        )
+
+
+class ProfileUsersByIdView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, profile_id):
+        profile = get_object_or_404(Profile, pk=profile_id)
+
+        users = User.objects.filter(
+            profile=profile,
+            status='Active'
+        ).order_by('id')
+
+        return Response({
+            'profile': {
+                'id': profile.id,
+                'name': profile.name,
+            },
+            'users': [
+                {
+                    'id': user.id,
+                    'name': (
+                        f"{user.first_name or ''} "
+                        f"{user.last_name or ''}"
+                    ).strip(),
+                    'email': user.email,
+                }
+                for user in users
+            ]
+        })
+
+
+class ProfileUsersByNameView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, profile_name):
+        profile = get_object_or_404(
+            Profile,
+            name__iexact=profile_name
+        )
+
+        users = User.objects.filter(
+            profile=profile,
+            status='Active'
+        ).order_by('id')
+
+        return Response({
+            'profile': {
+                'id': profile.id,
+                'name': profile.name,
+            },
+            'users': [
+                {
+                    'id': user.id,
+                    'name': (
+                        f"{user.first_name or ''} "
+                        f"{user.last_name or ''}"
+                    ).strip(),
+                    'email': user.email,
+                }
+                for user in users
+            ]
+        })
+class InactiveRecordsAPI(APIView): # show the list of inactive users, clients and projects
+    permission_classes = [AllowAny]
+    def get(self, request):
+        record_type = request.query_params.get('type', '').lower() # request.query_parms.get() use to access quiry parameter of url
+        if record_type == 'user':
+            records = User.objects.filter(status='Inactive').order_by('-id') # only inactive users
+            serializer_class = UserSerializer
+
+        elif record_type == 'client':
+            records = Client.objects.filter(
+                status='Inactive'
+            ).order_by('-id')
+            serializer_class = ClientSerializer
+
+        elif record_type == 'project':
+            records = Project.objects.filter(
+                is_deleted=True
+            ).prefetch_related('attachments').order_by('-id') # fetch objects efficiently
+            serializer_class = ProjectSerializer
+
+        else:
+            return Response(
+                {"error": "Invalid type. Please use user, client, or project."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(records, request)
+
+        if record_type == 'project':
+            serializer = serializer_class(page,many=True,context={'request': request})
+        else:
+            serializer = serializer_class(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class RestoreRecordAPI(APIView): # inactive records ko restore krne ke liye
+    permission_classes = [AllowAny]
+
+    def patch(self, request,record_type,pk):
+        record_type = record_type.lower()
+        if record_type == 'user':
+            record = User.objects.filter(pk=pk,status='Inactive').first() # check krta h ki user inactive h ya nhi
+            serializer_class = UserSerializer                       # first() use for getting first record if no record then none return
+
+        elif record_type == 'client':
+            record = Client.objects.filter(pk=pk,status='Inactive').first()
+            serializer_class = ClientSerializer
+
+        elif record_type == 'project':
+            record = Project.objects.filter(pk=pk,is_deleted=True).prefetch_related('attachments').first() # related attachments ko efficiently retrieve kr leta h
+            serializer_class = ProjectSerializer
+
+        else:
+            return Response(
+                {"error": "Invalid type. Use user, client, or project"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if record is None:
+            return Response(
+                {"error": "Inactive record not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        # Restore the selected record
+        if record_type in ['user', 'client']:
+            record.status = 'Active' # status update kr rhe h
+
+            if record_type == 'client':
+                record.modified_by = request.user
+                record.save(update_fields=['status', 'modified_by', 'modified_at'])
+            else:
+                record.save(update_fields=['status']) # for user
+
+        else:
+            record.is_deleted = False
+            record.deleted_at = None
+            record.modified_by = request.user
+            record.save(update_fields=['is_deleted','deleted_at','modified_by','modified_at'])
+    
+        if record_type == 'project':
+            serializer = serializer_class(
+                record,
+                context={'request': request}
+            )
+        else:
+            serializer = serializer_class(record) # agr user ya client restore hua h then serializer ko record pass kr rhe h
+
+        return Response(
+            {
+                "message": "Record restored successfully.",
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+
+
+
+
 
 
 

@@ -34,6 +34,14 @@ class User(AbstractUser):
         ('Active', 'Active'),
         ('Inactive', 'Inactive'),]
 
+    profile = models.ForeignKey(
+    'Profile',
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name='users')
+
+
     
     profiles = models.CharField(max_length=52,choices=Profile_Choices,default='Standard',null=True,blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
@@ -55,12 +63,19 @@ class User(AbstractUser):
     otp_is_used = models.BooleanField(default=False,null=True, blank=True)
     otp_request_count = models.PositiveIntegerField(default=0,null=True, blank=True)
     otp_request_window_start = models.DateTimeField(null= True, blank = True)
-    otp_blocked_until = models.DateTimeField(null= True, blank= True)
+    otp_blocked_until = models.DateTimeField(null = True, blank= True)
 
     def __str__(self):
         return self.email
-
-
+    
+class Profile(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_default = models.BooleanField(default=False)
+    class Meta:
+        ordering = ['-id']
+    def __str__(self):
+        return self.name
+    
 class Client(models.Model):
     STATUS_CHOICES = [
         ('Active', 'Active'),
@@ -111,6 +126,7 @@ class Project(models.Model):
     
     project_title = models.CharField(max_length= 100,null=True, blank=True)
     project_type = models.CharField(max_length=50,null=True, blank=True)
+    description = models.TextField(null = True,blank=True)
     date_of_completion = models.DateField(null=True, blank=True)
     project_status = models.CharField(max_length=42,choices=PROJECT_STATUS_CHOICES,default='In Progress',
         null=True, blank=True)
@@ -124,11 +140,34 @@ class Project(models.Model):
         null=True, blank=True)
     modified_at = models.DateTimeField(auto_now=True, null=True, blank=True)
     modified_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='modified_projects',
-        null=True, blank=True)
-    
+        null=True, blank=True) 
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.project_title}"
+
+
+class ProjectAttachment(models.Model):
+    project = models.ForeignKey('Project',on_delete=models.CASCADE,related_name="attachments")
+    file = models.FileField(upload_to='project_attachments/')
+    file_name = models.CharField(max_length=250,null=True,blank=True)
+    uploaded_by = models.ForeignKey('User',on_delete= models.PROTECT,null=True,blank=True,related_name='uploaded_project_attachments')
+    uploaded_at = models.DateTimeField(auto_now=True)
+    modified_by = models.ForeignKey('User',on_delete= models.PROTECT,null=True,blank=True,related_name='modified_project_attachments')
+    modified_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.file.name
+
+
+
+
+
+
+
+
+
 
 
 
