@@ -130,10 +130,11 @@ class ProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['is_default']
 
     SYSTEM_PROFILES = [
-        'Administrator',
-        'Standard',
+        'Super Admin',
+        'Admin',
+        'Manager',
+        'Team Leader',
         'Developer',
-        'Client',
         'Human Resource',
     ]
 
@@ -236,29 +237,46 @@ class ClientSerializer(serializers.ModelSerializer):
     def get_created_by(self, obj):
         if obj.created_by is None:
             return None
+        profile = None
+        if obj.created_by.profile is not None:
+            profile = {
+                'id': obj.created_by.profile.id,
+                'name': obj.created_by.profile.name
+            }
 
         return {
             'id': obj.created_by.id,
             'first_name': obj.created_by.first_name,
             'last_name': obj.created_by.last_name,
             'email': obj.created_by.email,
+            'profile': profile
         }
 
     def get_modified_by(self, obj):
         if obj.modified_by is None:
             return None
+        profile = None
+        if obj.modified_by.profile is not None:
+            profile = {
+                'id': obj.modified_by.profile.id,
+                'name': obj.modified_by.profile.name
+            }
 
         return {
             'id': obj.modified_by.id,
             'first_name': obj.modified_by.first_name,
             'last_name': obj.modified_by.last_name,
             'email': obj.modified_by.email,
+            'profile': profile
         }
 
 class ProjectSerializer(serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     modified_by = serializers.SerializerMethodField()
-    attachments = serializers.SerializerMethodField(read_only=True) # attached file ki details response mai show krne ke liye
+    attachments = serializers.SerializerMethodField(read_only=True)
+    # client = serializers.SerializerMethodField()
+    # manager = serializers.SerializerMethodField()
+     # attached file ki details response mai show krne ke liye
 
     new_attachments = serializers.ListField( # list field  use so that multiple file  can be uploaded
         child=serializers.FileField(), 
@@ -274,12 +292,51 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ['id','project_title','project_type','description','date_of_completion','project_status',
-                  'client','manager','created_at','created_by','modified_at','modified_by','attachments',
+        fields = ['id','project_title','project_type','description','attachments','date_of_completion','project_status',
+                  'client','manager','created_at','created_by','modified_at','modified_by',
                   'new_attachments','delete_attachment_ids', ] 
        
         read_only_fields = ['id','created_at','created_by','modified_at','modified_by','attachments',]
-        
+
+      # client/manager input me id, output me id/first_name/last_name/email
+    # def to_representation(self, instance):
+    #     data= super().to_representation(instance)
+    #     for field in ['client','manager']:
+    #         obj= getattr(instance, field)
+    #         if obj is None:
+    #             data[field]= None
+    #         else:
+    #             data[field]= {"id": obj.id, "first_name": obj.first_name, "last_name": obj.last_name, "email": obj.email}
+    #     return data   
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        # Client details
+        if instance.client is None:
+            data['client'] = None
+        else:
+            data['client'] = {
+                "id": instance.client.id,
+                "first_name": instance.client.first_name,
+                "last_name": instance.client.last_name,
+                "email": instance.client.email
+            }
+
+        # Manager details
+        if instance.manager is None:
+            data['manager'] = None
+        else:
+            data['manager'] = {
+                "id": instance.manager.id,
+                "profile_id": instance.manager.profile.id if instance.manager.profile else None,
+                "first_name": instance.manager.first_name,
+                "last_name": instance.manager.last_name,
+                "email": instance.manager.email
+            }
+
+        return data
+
+    
     def validate(self, attrs):
         required_fields = ['project_title', 'project_type', 'manager']
 
@@ -306,34 +363,88 @@ class ProjectSerializer(serializers.ModelSerializer):
             })
 
         manager = attrs.get('manager')
-        if manager is not None and manager.status != 'Active':
-            raise serializers.ValidationError({
-                'manager': 'Manager is not active.'
-            })
+
+        if manager is not None:
+            if manager.status != 'Active':
+                raise serializers.ValidationError({
+                    'manager': 'Manager is not active.'
+                })
+
+            if manager.profile is None or manager.profile.name.casefold() != 'manager':
+                raise serializers.ValidationError({
+                    'manager': 'Only users with Manager profile can be assigned as project manager.'
+                })
+
+        # manager = attrs.get('manager')
+        # if manager is not None and manager.status != 'Active':
+        #     raise serializers.ValidationError({
+        #         'manager': 'Manager is not active.'
+        #     })
 
         return attrs
 
     def get_created_by(self, obj):
         if obj.created_by is None:
             return None
+        profile = None
+        if obj.created_by.profile is not None:
+            profile = {
+                'id': obj.created_by.profile.id,
+                'name': obj.created_by.profile.name
+            }
 
         return {
             'id': obj.created_by.id,
             'first_name': obj.created_by.first_name,
             'last_name': obj.created_by.last_name,
             'email': obj.created_by.email,
+            'profile': profile
+            
         }
 
     def get_modified_by(self, obj):
         if obj.modified_by is None:
             return None
 
+        profile = None
+        if obj.modified_by.profile is not None:
+            profile = {
+                'id': obj.modified_by.profile.id,
+                'name': obj.modified_by.profile.name
+            }
+
         return {
             'id': obj.modified_by.id,
             'first_name': obj.modified_by.first_name,
             'last_name': obj.modified_by.last_name,
             'email': obj.modified_by.email,
+            'profile': profile
         }
+            
+        
+
+    # def get_client(self, obj):
+    #     if obj.client is None:
+    #         return None
+
+    #     return {
+    #         'id': obj.client.id,
+    #         'first_name': obj.client.first_name,
+    #         'last_name': obj.client.last_name,
+    #         'email': obj.client.email,
+    #     }
+
+
+    # def get_manager(self, obj):
+    #     if obj.manager is None:
+    #         return None
+
+    #     return {
+    #         'id': obj.manager.id,
+    #         'first_name': obj.manager.first_name,
+    #         'last_name': obj.manager.last_name,
+    #         'email': obj.manager.email,
+    #     }
 
     def get_attachments(self, obj):
         attachments = obj.attachments.all() # get all attachment of current project
@@ -366,8 +477,8 @@ class ProjectSerializer(serializers.ModelSerializer):
                 project=project,
                 file=file,
                 file_name=file.name,
-                uploaded_by=user,
-                modified_by=user
+                # uploaded_by=user,
+                # modified_by=user
             )
 
         return project
@@ -422,33 +533,33 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class ProjectAttachmentSerializer(serializers.ModelSerializer):
-    uploaded_by = serializers.SerializerMethodField()
-    modified_by = serializers.SerializerMethodField()
+    # uploaded_by = serializers.SerializerMethodField()
+    # modified_by = serializers.SerializerMethodField()
     class Meta:
         model = ProjectAttachment
-        fields = ['id','project','file','file_name','uploaded_at','uploaded_by','modified_by','modified_at',]
+        fields = ['id', 'file', 'file_name']
 
-        read_only_fields = ['id','project','uploaded_at','uploaded_by','modified_by','modified_at',]
+        read_only_fields = ['id']
 
-    def get_uploaded_by(self, obj):
-        if obj.uploaded_by is None:
-            return None
+    # def get_uploaded_by(self, obj):
+    #     if obj.uploaded_by is None:
+    #         return None
 
-        return {
-            'first_name': obj.uploaded_by.first_name,
-            'last_name': obj.uploaded_by.last_name,
-            'email': obj.uploaded_by.email,
-        }
+    #     return {
+    #         'first_name': obj.uploaded_by.first_name,
+    #         'last_name': obj.uploaded_by.last_name,
+    #         'email': obj.uploaded_by.email,
+    #     }
 
-    def get_modified_by(self, obj):
-        if obj.modified_by is None:
-            return None
+    # def get_modified_by(self, obj):
+    #     if obj.modified_by is None:
+    #         return None
 
-        return {
-            'first_name': obj.modified_by.first_name,
-            'last_name': obj.modified_by.last_name,
-            'email': obj.modified_by.email,
-        }
+    #     return {
+    #         'first_name': obj.modified_by.first_name,
+    #         'last_name': obj.modified_by.last_name,
+    #         'email': obj.modified_by.email,
+    #     }
 
 
 

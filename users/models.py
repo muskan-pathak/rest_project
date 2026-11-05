@@ -8,13 +8,6 @@ class User(AbstractUser):
     first_name = models.CharField(max_length=100,null = True, blank = True)
     last_name = models.CharField(max_length=100,null = True, blank = True)
 
-    Profile_Choices = [
-            ('Administrator', 'Administrator'),
-            ('Standard', 'Standard'),
-            ('Developer', 'Developer'),
-            ('Client', 'Client'),
-            ('Human Resource', 'Human Resource'),
-        ]
     gender_choices = [
         ('Male', 'Male'),
         ('Female', 'Female'),
@@ -43,7 +36,7 @@ class User(AbstractUser):
 
 
     
-    profiles = models.CharField(max_length=52,choices=Profile_Choices,default='Standard',null=True,blank=True)
+    # profiles = models.CharField(max_length=52,choices=Profile_Choices,default='Standard',null=True,blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=12, choices=gender_choices, blank = True, null= True)
     nationality = models.CharField(max_length=100, blank=True, null=True)
@@ -152,10 +145,7 @@ class ProjectAttachment(models.Model):
     project = models.ForeignKey('Project',on_delete=models.CASCADE,related_name="attachments")
     file = models.FileField(upload_to='project_attachments/')
     file_name = models.CharField(max_length=250,null=True,blank=True)
-    uploaded_by = models.ForeignKey('User',on_delete= models.PROTECT,null=True,blank=True,related_name='uploaded_project_attachments')
-    uploaded_at = models.DateTimeField(auto_now=True)
-    modified_by = models.ForeignKey('User',on_delete= models.PROTECT,null=True,blank=True,related_name='modified_project_attachments')
-    modified_at = models.DateTimeField(auto_now=True)
+
 
     def __str__(self):
         return self.file.name
