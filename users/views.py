@@ -12,9 +12,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User, Client, Project, ProjectAttachment, Profile
+from .models import User, Client, Project, ProjectAttachment, Profile,ProjectTask,TaskComment
 from .serializers import (UserSerializer,ClientSerializer,LoginSerializer,SendOTPSerializer,VerifyOTPSerializer,
-ForgotPasswordSerializer,ResetPasswordSerializer,ProjectSerializer,ProjectAttachmentSerializer,ProfileSerializer,)
+ForgotPasswordSerializer,ResetPasswordSerializer,ProjectSerializer,ProjectAttachmentSerializer,ProfileSerializer,ProjectTaskSerializer,TaskCommentSerializer)
 from .utils import validate_user_otp, send_limited_otp
 import logging
 # class Pagination(PageNumberPagination):
@@ -1398,69 +1398,349 @@ class RestoreProjectAPI(APIView):
             status=status.HTTP_200_OK
         )
 
+class ProjectTaskListCreateAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            ProjectTask.objects
+            .filter(is_deleted=False)
+            .select_related(
+                'project',
+                'assign_by',
+                'assign_to',
+                'assign_by__profile',
+                'assign_to__profile'
+            )
+            .order_by('-id')
+        )
+
+    # GET - List all active tasks
+    def get(self, request):
+
+        tasks = self.get_queryset()
+
+        paginator = PageNumberPagination()
+        paginated_tasks = paginator.paginate_queryset(
+            tasks,
+            request
+        )
+
+        serializer = ProjectTaskSerializer(
+            paginated_tasks,
+            many=True,
+            context={'request': request}
+        )
+
+        return paginator.get_paginated_response(serializer.data)
+
+    # POST - Create new task
+    def post(self, request):
+
+        serializer = ProjectTaskSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+
+            task = serializer.save(
+                created_by=request.user,
+                updated_by=request.user
+            )
+
+            response_serializer = ProjectTaskSerializer(
+                task,
+                context={'request': request}
+            )
+
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+class ProjectTaskDetailAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_task(self, pk):
+        try:
+            return (
+                ProjectTask.objects
+                .filter(is_deleted=False)
+                .select_related(
+                    'project',
+                    'assign_by',
+                    'assign_to',
+                    'assign_by__profile',
+                    'assign_to__profile'
+                )
+                .get(pk=pk)
+            )
+
+        except ProjectTask.DoesNotExist:
+            return None
+
+    # GET - Retrieve single task
+    def get(self, request, pk):
+
+        task = self.get_task(pk)
+
+        if task is None:
+            return Response(
+                {'error': 'Task not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = ProjectTaskSerializer(
+            task,
+            context={'request': request}
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    # PUT - Complete update
+    def put(self, request, pk):
+
+        task = self.get_task(pk)
+
+        if task is None:
+            return Response(
+                {'error': 'Task not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = ProjectTaskSerializer(
+            task,
+            data=request.data,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+
+            task = serializer.save(
+                updated_by=request.user
+            )
+
+            response_serializer = ProjectTaskSerializer(
+                task,
+                context={'request': request}
+            )
+
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # PATCH - Partial update
+    def patch(self, request, pk):
+
+        task = self.get_task(pk)
+
+        if task is None:
+            return Response(
+                {'error': 'Task not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = ProjectTaskSerializer(
+            task,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+
+            task = serializer.save(
+                updated_by=request.user
+            )
+
+            response_serializer = ProjectTaskSerializer(
+                task,
+                context={'request': request}
+            )
+
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # DELETE - Soft delete
+    def delete(self, request, pk):
+
+        task = self.get_task(pk)
+
+        if task is None:
+            return Response(
+                {'error': 'Task not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        task.is_deleted = True
+        task.updated_by = request.user
+
+        task.save(
+            update_fields=[
+                'is_deleted',
+                'updated_by',
+                'updated_at'
+            ]
+        )
+
+        return Response(
+            {'message': 'Task deleted successfully.'},
+            status=status.HTTP_200_OK
+        )
 
 
-# class RestoreRecordAPI(APIView): # inactive records ko restore krne ke liye
-#     permission_classes = [AllowAny]
 
-#     def patch(self, request,record_type,pk):
-#         record_type = record_type.lower()
-#         if record_type == 'user':
-#             record = User.objects.filter(pk=pk,status='Inactive').first() # check krta h ki user inactive h ya nhi
-#             serializer_class = UserSerializer                       # first() use for getting first record if no record then none return
+class TaskCommentListCreateAPI(APIView):
+    permission_classes = [IsAuthenticated]
 
-#         elif record_type == 'client':
-#             record = Client.objects.filter(pk=pk,status='Inactive').first()
-#             serializer_class = ClientSerializer
+    def get_queryset(self):
+        return (
+            TaskComment.objects
+            .filter(task__is_deleted=False)
+            .select_related('task', 'user')
+            .order_by('-id')
+        )
 
-#         elif record_type == 'project':
-#             record = Project.objects.filter(pk=pk,is_deleted=True).prefetch_related('attachments').first() # related attachments ko efficiently retrieve kr leta h
-#             serializer_class = ProjectSerializer
+    # GET - List all task comments
+    def get(self, request):
 
-#         else:
-#             return Response(
-#                 {"error": "Invalid type. Use user, client, or project"},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-#         if record is None:
-#             return Response(
-#                 {"error": "Inactive record not found."},
-#                 status=status.HTTP_404_NOT_FOUND
-#             )
-#         # Restore the selected record
-#         if record_type in ['user', 'client']:
-#             record.status = 'Active' # status update kr rhe h
+        comments = self.get_queryset()
 
-#             if record_type == 'client':
-#                 record.modified_by = request.user
-#                 record.save(update_fields=['status', 'modified_by', 'modified_at'])
-#             else:
-#                 record.save(update_fields=['status']) # for user
+        task_id = request.query_params.get('task_id')
 
-#         else:
-#             record.is_deleted = False
-#             record.deleted_at = None
-#             record.modified_by = request.user
-#             record.save(update_fields=['is_deleted','deleted_at','modified_by','modified_at'])
-    
-#         if record_type == 'project':
-#             serializer = serializer_class(
-#                 record,
-#                 context={'request': request}
-#             )
-#         else:
-#             serializer = serializer_class(record) # agr user ya client restore hua h then serializer ko record pass kr rhe h
+        if task_id:
+            comments = comments.filter(task_id=task_id)
 
+        paginator = PageNumberPagination()
+        paginated_comments = paginator.paginate_queryset(
+            comments,
+            request
+        )
+
+        serializer = TaskCommentSerializer(
+            paginated_comments,
+            many=True,
+            context={'request': request}
+        )
+
+        return paginator.get_paginated_response(serializer.data)
+
+    # POST - Create new task comment
+    def post(self, request):
+
+        serializer = TaskCommentSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+
+            comment = serializer.save(
+                user=request.user
+            )
+
+            response_serializer = TaskCommentSerializer(
+                comment,
+                context={'request': request}
+            )
+
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+class TaskCommentDetailAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        return get_object_or_404(
+            TaskComment.objects.select_related('task', 'user'),
+            pk=pk,task__is_deleted=False)
         
+    def get(self, request, pk):     # for single task details
+        comment = self.get_object(pk)
 
-        
-        # return Response(
-        #     {
-        #         "message": "Record restored successfully.",
-        #         "data": serializer.data
-        #     },
-        #     status=status.HTTP_200_OK
-        # )
+        serializer = TaskCommentSerializer(
+            comment,context={'request': request})
+
+        return Response(
+            serializer.data,status=status.HTTP_200_OK)   
+
+    def put(self, request, pk):
+        comment = self.get_object(pk)
+
+        serializer = TaskCommentSerializer(comment,data=request.data,context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+    def patch(self, request, pk):
+        comment = self.get_object(pk)
+
+        serializer = TaskCommentSerializer(comment,data=request.data,partial=True,
+            context={'request': request})
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def delete(self, request, pk):  # hard delete comment
+        comment = self.get_object(pk)
+        comment.delete()
+
+        return Response(
+            {"message": "Task comment deleted successfully."},
+            status=status.HTTP_200_OK
+        )
+
+
+
 
 
 

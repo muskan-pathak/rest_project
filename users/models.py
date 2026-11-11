@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from rest_framework.utils.field_mapping import get_field_kwargs
 
 
 class User(AbstractUser):
@@ -120,6 +121,7 @@ class Project(models.Model):
     project_title = models.CharField(max_length= 100,null=True, blank=True)
     project_type = models.CharField(max_length=50,null=True, blank=True)
     description = models.TextField(null = True,blank=True)
+    start_date = models.DateField(auto_now_add=True, null=True, blank=True)
     date_of_completion = models.DateField(null=True, blank=True)
     project_status = models.CharField(max_length=42,choices=PROJECT_STATUS_CHOICES,default='In Progress',
         null=True, blank=True)
@@ -135,7 +137,7 @@ class Project(models.Model):
     modified_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='modified_projects',
         null=True, blank=True) 
     is_deleted = models.BooleanField(default=False)
-    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True) 
 
     def __str__(self):
         return f"{self.project_title}"
@@ -149,6 +151,50 @@ class ProjectAttachment(models.Model):
 
     def __str__(self):
         return self.file.name
+
+
+
+class ProjectTask(models.Model):
+    STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('In Progress', 'In Progress'),
+        ('Completed', 'Completed'),
+        ('On Hold', 'On Hold'),
+        ('Cancelled', 'Cancelled'),]
+    
+    project = models.ForeignKey('Project',on_delete=models.PROTECT,related_name='tasks',null=True,blank=True)
+    assign_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='assigned_by_tasks',null=True,blank=True)            
+    assign_to = models.ForeignKey('User',on_delete=models.PROTECT,related_name='assigned_tasks',null=True,blank=True)
+    title = models.CharField(max_length=200, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=20,choices=STATUS_CHOICES,default='Pending',null=True,blank=True)
+    task_start_date = models.DateField(auto_now_add=True,null=True, blank=True)
+    deadline_date = models.DateField(null=True, blank=True)
+    completion_date = models.DateField(null=True, blank=True)
+    # restore_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='restored_tasks',null=True,blank=True) 
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    created_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='created_tasks',null=True,blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    updated_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='updated_tasks',null=True,blank=True)
+    is_deleted = models.BooleanField(default=False)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['project', 'title'],name='unique_task_title_per_project')]
+              
+    def __str__(self):
+        return self.title or f"Task {self.id}"
+
+
+class TaskComment(models.Model):
+    task = models.ForeignKey('ProjectTask',on_delete=models.CASCADE,related_name='comments')
+    user = models.ForeignKey('User',on_delete=models.PROTECT,related_name='task_comments')
+    comment = models.TextField(null=True,blank=True)
+    def __str__(self):
+        return f"Comment on Task {self.task_id} by {self.user_id}"
+
+
+
+
+
 
 
 

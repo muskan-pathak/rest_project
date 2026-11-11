@@ -1,9 +1,9 @@
 from rest_framework import serializers
-from .models import User, Profile, Client, Project,ProjectAttachment
+from .models import User, Profile, Client, Project,ProjectAttachment,ProjectTask,TaskComment
 from .utils import generate_unique_username
 from django.db import transaction
 
-class ProfileIdOrNameField(serializers.RelatedField):
+class ProfileIdOrNameField(serializers.RelatedField): 
     def to_internal_value(self, data):
         if isinstance(data, bool):
             raise serializers.ValidationError(
@@ -273,10 +273,8 @@ class ClientSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     modified_by = serializers.SerializerMethodField()
+    manager = serializers.IntegerField(write_only=True)
     attachments = serializers.SerializerMethodField(read_only=True)
-    # client = serializers.SerializerMethodField()
-    # manager = serializers.SerializerMethodField()
-     # attached file ki details response mai show krne ke liye
 
     new_attachments = serializers.ListField( # list field  use so that multiple file  can be uploaded
         child=serializers.FileField(), 
@@ -292,11 +290,11 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ['id','project_title','project_type','description','attachments','date_of_completion','project_status',
+        fields = ['id','project_title','project_type','description','attachments','start_date','date_of_completion','project_status',
                   'client','manager','created_at','created_by','modified_at','modified_by',
                   'new_attachments','delete_attachment_ids', ] 
        
-        read_only_fields = ['id','created_at','created_by','modified_at','modified_by','attachments',]
+        read_only_fields = ['id','start_date','created_at','created_by','modified_at','modified_by','attachments',]
 
       # client/manager input me id, output me id/first_name/last_name/email
     # def to_representation(self, instance):
@@ -336,6 +334,14 @@ class ProjectSerializer(serializers.ModelSerializer):
 
         return data
 
+    def validate_project_title(self, value):
+        if value and value.strip():
+            projects= Project.objects.filter(project_title__iexact=value.strip())
+            if self.instance:
+                projects= projects.exclude(pk= self.instance.pk)
+            if projects.exists():
+                raise serializers.ValidationError("A project with this title already exists.")
+        return value
     
     def validate(self, attrs):
         required_fields = ['project_title', 'project_type', 'manager']
@@ -361,25 +367,34 @@ class ProjectSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'client': 'Client is not active.'
             })
+        manager_id = attrs.get('manager')
 
-        manager = attrs.get('manager')
+        if manager_id is not None:
+            try:
+                manager = User.objects.get(id=manager_id)
+            except User.DoesNotExist:
+                raise serializers.ValidationError({
+                    'error': f'Manager with ID {manager_id} does not exist.'
+                })
 
-        if manager is not None:
             if manager.status != 'Active':
                 raise serializers.ValidationError({
-                    'manager': 'Manager is not active.'
+                    'error': f'Manager with ID {manager_id} is not active.'
                 })
 
             if manager.profile is None or manager.profile.name.casefold() != 'manager':
                 raise serializers.ValidationError({
-                    'manager': 'Only users with Manager profile can be assigned as project manager.'
+                    'error': 'Only users with Manager profile can be assigned as project manager.'
                 })
 
-        # manager = attrs.get('manager')
-        # if manager is not None and manager.status != 'Active':
-        #     raise serializers.ValidationError({
-        #         'manager': 'Manager is not active.'
-        #     })
+            attrs['manager'] = manager
+        end= attrs.get('date_of_completion')
+        if end:
+            from datetime import date
+            start= self.instance.start_date if self.instance and self.instance.start_date else date.today()
+            if end < start:
+                raise serializers.ValidationError({'date_of_completion': 'date_of_completion cannot be before start_date.'})
+
 
         return attrs
 
@@ -420,31 +435,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             'email': obj.modified_by.email,
             'profile': profile
         }
-            
-        
-
-    # def get_client(self, obj):
-    #     if obj.client is None:
-    #         return None
-
-    #     return {
-    #         'id': obj.client.id,
-    #         'first_name': obj.client.first_name,
-    #         'last_name': obj.client.last_name,
-    #         'email': obj.client.email,
-    #     }
-
-
-    # def get_manager(self, obj):
-    #     if obj.manager is None:
-    #         return None
-
-    #     return {
-    #         'id': obj.manager.id,
-    #         'first_name': obj.manager.first_name,
-    #         'last_name': obj.manager.last_name,
-    #         'email': obj.manager.email,
-    #     }
 
     def get_attachments(self, obj):
         attachments = obj.attachments.all() # get all attachment of current project
@@ -541,25 +531,209 @@ class ProjectAttachmentSerializer(serializers.ModelSerializer):
 
         read_only_fields = ['id']
 
-    # def get_uploaded_by(self, obj):
-    #     if obj.uploaded_by is None:
-    #         return None
 
-    #     return {
-    #         'first_name': obj.uploaded_by.first_name,
-    #         'last_name': obj.uploaded_by.last_name,
-    #         'email': obj.uploaded_by.email,
-    #     }
 
-    # def get_modified_by(self, obj):
-    #     if obj.modified_by is None:
-    #         return None
+class ProjectTaskSerializer(serializers.ModelSerializer):
 
-    #     return {
-    #         'first_name': obj.modified_by.first_name,
-    #         'last_name': obj.modified_by.last_name,
-    #         'email': obj.modified_by.email,
-    #     }
+
+    project = serializers.PrimaryKeyRelatedField(    # Input mein ID accept hongi
+        queryset=Project.objects.all(),required=True)
+
+    assign_by = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),required=True)
+
+    assign_to = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),required=True )
+
+    title = serializers.CharField(required=True,allow_blank=False,allow_null=False)
+    description = serializers.CharField(required=True,allow_blank=False,allow_null=False) 
+    status = serializers.CharField(required=False)
+    task_start_date = serializers.DateField(read_only=True)
+
+    class Meta:
+        model = ProjectTask
+
+        fields = ['id','title','description','status','task_start_date','deadline_date',
+                  'completion_date','is_deleted','project','assign_by','assign_to',
+                  'created_at','created_by','updated_at','updated_by',]
+            
+        read_only_fields = ['id','task_start_date','is_deleted','created_at','created_by',
+                            'updated_at','updated_by',]
+     
+
+    def validate_title(self, value):  # Title validation
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Task title is required."
+            )
+
+        return value
+
+    def validate_description(self, value):  # Description validation
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Task description is required."
+            )
+
+        return value
+
+    
+    def validate_assign_by(self, value):    # Assign By validation
+
+        if value.status != 'Active':
+            raise serializers.ValidationError(
+                "Inactive user cannot assign a task."
+            )
+
+        if (
+            value.profile is None
+            or value.profile.name.casefold() not in ['manager', 'team leader']
+        ):
+            raise serializers.ValidationError(
+                "Only Manager or Team Leader can assign tasks."
+            )
+
+        return value
+
+    
+    def validate_status(self, value):  # Status validation
+
+        value = value.strip().casefold()
+
+        for choice_value, choice_label in ProjectTask.STATUS_CHOICES:
+            if value == choice_value.casefold():
+                return choice_value
+
+        raise serializers.ValidationError(
+            "Enter a valid task status."
+        )
+
+
+    def validate(self, attrs):      # Unique title validation within the same project
+
+        project = attrs.get(
+            'project',self.instance.project if self.instance else None)
+            
+        title = attrs.get('title',self.instance.title if self.instance else None)
+        if project and title:
+            queryset = ProjectTask.objects.filter(project=project,title__iexact=title)
+            if self.instance:
+                queryset = queryset.exclude(id=self.instance.id)      
+
+            if queryset.exists():
+                raise serializers.ValidationError({
+                    'title': 'This task title already exists in this project.'
+                })
+
+        return attrs
+
+    # Common User Details
+    def get_user_details(self, user):
+
+        if not user:
+            return None
+
+        return {
+            'id': user.id,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'email': user.email,
+            'profile': (
+                {
+                    'id': user.profile.id,
+                    'name': user.profile.name
+                }
+                if user.profile else None
+            )
+        }
+
+    # Nested response representation
+    def to_representation(self, instance):
+
+        data = super().to_representation(instance)
+        if instance.project:        # Project details
+            data['project'] = {
+                'id': instance.project.id,
+                'project_title': instance.project.project_title,
+                'project_type': instance.project.project_type,
+                'project_status': instance.project.project_status
+            }
+        else:
+            data['project'] = None
+
+        # Assign By details
+        data['assign_by'] = self.get_user_details(
+            instance.assign_by
+        )
+
+        # Assign To details
+        data['assign_to'] = self.get_user_details(
+            instance.assign_to
+        )
+
+        # Created By details
+        data['created_by'] = self.get_user_details(
+            instance.created_by
+        )
+
+        # Updated By details
+        data['updated_by'] = self.get_user_details(
+            instance.updated_by
+        )
+
+        return data
+    
+class TaskCommentSerializer(serializers.ModelSerializer):
+
+    task = serializers.PrimaryKeyRelatedField(
+        queryset=ProjectTask.objects.filter(is_deleted=False),required=True )
+        
+    user = serializers.PrimaryKeyRelatedField(read_only=True )
+
+    comment = serializers.CharField(required=True, allow_blank=False,allow_null=False)
+    class Meta:
+        model = TaskComment
+
+        fields = ['id','task','user','comment']
+        read_only_fields = ['id','user']
+
+    def validate_comment(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Comment is required."
+            )
+
+        return value
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        data['task'] = {
+            'id': instance.task.id,
+            'title': instance.task.title
+        }
+
+        data['user'] = {
+            'id': instance.user.id,
+            'first_name': instance.user.first_name,
+            'last_name': instance.user.last_name,
+            'email': instance.user.email
+        }
+
+        return data
+
+
+
+
+
+
+    
 
 
 

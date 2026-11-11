@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (UserListCreateAPI,UserDetailAPI,LoginAPIView,SendOTPAPIView,VerifyOTPAPIView,ForgotPasswordAPIView,ResetPasswordAPIView,
 ClientListCreateAPI, ClientDetailAPI,ProjectListCreateAPI,ProjectDetailAPI,ProfileListCreateView,
-ProfileDetailView,ProfileUsersByIdView,ProfileUsersByNameView,RestoreUserAPI,RestoreClientAPI,RestoreProjectAPI)  
+ProfileDetailView,ProfileUsersByIdView,ProfileUsersByNameView,RestoreUserAPI,RestoreClientAPI,RestoreProjectAPI,ProjectTaskListCreateAPI,ProjectTaskDetailAPI,TaskCommentListCreateAPI,TaskCommentDetailAPI)  
 
 urlpatterns = [
     path('users/', UserListCreateAPI.as_view(), name='user-list-create'),
@@ -21,14 +21,35 @@ urlpatterns = [
     path('profiles/<int:pk>/', ProfileDetailView.as_view(), name='profile-detail'),
     path('projects/<int:pk>/attachments/<int:attachment_id>/',ProjectDetailAPI.as_view(),
     name='project-attachment-delete'),
-    # path('inactive-records/',InactiveRecordsAPI.as_view(),name='inactive-records'),
-    # path('restore/<str:record_type>/<int:pk>/',RestoreRecordAPI.as_view(),name='restore-record'),
     path('users/restore/',RestoreUserAPI.as_view(),name='restore-users'),
     path('users/restore/<str:ids>/',RestoreUserAPI.as_view(),name='restore-users-by-ids'),
     path('clients/restore/<str:ids>/',RestoreClientAPI.as_view(),name='restore-clients-by-ids'),
     path('clients/restore/',RestoreClientAPI.as_view(),name='restore-clients'),
     path('projects/restore/',RestoreProjectAPI.as_view(),name='restore-projects'),
-    path('projects/restore/<str:ids>/',RestoreProjectAPI.as_view(),name='restore-projects-by-ids')
+    path('projects/restore/<str:ids>/',RestoreProjectAPI.as_view(),name='restore-projects-by-ids'),
+    path('project-tasks/',ProjectTaskListCreateAPI.as_view(),name='project-task-list-create'),
+    path('project-tasks/<int:pk>/',ProjectTaskDetailAPI.as_view(),name='project-task-detail'),
+    path('task-comments/',TaskCommentListCreateAPI.as_view(),name='task-comments'),
+    path('task-comments/<int:pk>/', TaskCommentDetailAPI.as_view(), name='task-comment-detail'),
+    
+    
+    
+
+    
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+    
     
 ]   
     
