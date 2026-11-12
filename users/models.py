@@ -2,12 +2,11 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from rest_framework.utils.field_mapping import get_field_kwargs
 
-
 class User(AbstractUser):
     email = models.EmailField(unique = True, null=True, blank=True)
-    user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
-    first_name = models.CharField(max_length=100,null = True, blank = True)
-    last_name = models.CharField(max_length=100,null = True, blank = True)
+    # user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
+    # first_name = models.CharField(max_length=100,null = True, blank = True)
+    # last_name = models.CharField(max_length=100,null = True, blank = True)
 
     gender_choices = [
         ('Male', 'Male'),
@@ -49,7 +48,7 @@ class User(AbstractUser):
     emergency_contact_name = models.CharField(max_length=100, blank=True,null=True)
     emergency_contact_number = models.CharField(max_length=15, blank=True,null=True)
     emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
-    password = models.CharField("password", max_length=128, null=True, blank=True)
+    # password = models.CharField("password", max_length=128, null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status_Choices, default='Active',blank=True, null=True)
     otp_hash = models.CharField(max_length=128, blank=True, null=True) 
     otp_created_at = models.DateTimeField(null=True, blank=True)
@@ -185,8 +184,8 @@ class ProjectTask(models.Model):
 
 
 class TaskComment(models.Model):
-    task = models.ForeignKey('ProjectTask',on_delete=models.CASCADE,related_name='comments')
-    user = models.ForeignKey('User',on_delete=models.PROTECT,related_name='task_comments')
+    task = models.ForeignKey('ProjectTask',on_delete=models.CASCADE,related_name='comments',null=True,blank=True)
+    user = models.ForeignKey('User',on_delete=models.PROTECT,related_name='task_comments',null=True,blank=True)
     comment = models.TextField(null=True,blank=True)
     def __str__(self):
         return f"Comment on Task {self.task_id} by {self.user_id}"

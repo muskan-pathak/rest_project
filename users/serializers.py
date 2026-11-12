@@ -46,20 +46,23 @@ class UserSerializer(serializers.ModelSerializer):
     #     queryset=Profile.objects.all(),
     #     required=False,
     #     allow_null=True)
+    # profile = serializers.PrimaryKeyRelatedField(
+    # queryset=Profile.objects.all(),required=True,allow_null=False)
     profile = serializers.PrimaryKeyRelatedField(
-    queryset=Profile.objects.all(),required=True,allow_null=False)
-
-
+    queryset=Profile.objects.all(),required=True,allow_null=False,
+    error_messages={
+        'does_not_exist': 'Profile with ID "{pk_value}" does not exist. Please enter a valid profile ID.'
+    })
     profile_details = serializers.SerializerMethodField(read_only=True)
-    profile_details = serializers.SerializerMethodField(read_only=True)     
+    # profile_details = serializers.SerializerMethodField(read_only=True)     
     gender = serializers.CharField(required=False,allow_blank=True,allow_null=True)
     blood_group = serializers.CharField( required=False,allow_blank=True,allow_null=True)
     status = serializers.CharField(required=False,allow_blank=True,allow_null=True)
-    user_name = serializers.CharField(required=False,allow_blank=True,allow_null=True)
+    # user_name = serializers.CharField(required=False,allow_blank=True,allow_null=True)
 
     class Meta:
         model = User
-        fields = ['id','first_name','last_name','user_name','email','password', 'profile',
+        fields = ['id','first_name','last_name','email','password', 'profile',
         'profile_details','date_of_birth','gender', 'nationality','image','blood_group',
         'phone','permanent_address','current_address','emergency_contact_name','emergency_contact_number',
         'emergency_contact_relationship','status',]
@@ -72,13 +75,13 @@ class UserSerializer(serializers.ModelSerializer):
         },
     }
 
-    def validate_profiles(self, value):
-        value = value.strip()
+    # def validate_profiles(self, value):
+    #     value = value.strip()
 
-        for option, _label in User.Profile_Choices: # for case insensitivity like developer becomes Developer
-            if value.casefold() == option.casefold():
-                return option
-        return value
+    #     for option, _label in User.Profile_Choices: # for case insensitivity like developer becomes Developer
+    #         if value.casefold() == option.casefold():
+    #             return option
+    #     return value
 
     
     def get_profile_details(self, obj):
@@ -557,7 +560,7 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
                   'completion_date','is_deleted','project','assign_by','assign_to',
                   'created_at','created_by','updated_at','updated_by',]
             
-        read_only_fields = ['id','task_start_date','is_deleted','created_at','created_by',
+        read_only_fields = ['id','is_deleted','created_at','created_by',
                             'updated_at','updated_by',]
      
 

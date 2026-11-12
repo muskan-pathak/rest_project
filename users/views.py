@@ -23,7 +23,7 @@ import logging
 #     max_page_size = 100
 
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
-    permission_classes = [AllowAny] # this for allowing any user to acess this view
+    permission_classes = [IsAuthenticated] # this for allowing any user to acess this view
     def get(self, request):
         # users = User.objects.filter(status='Active')
         user_status = request.query_params.get('status', 'Active')
@@ -74,20 +74,59 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
         return paginator.get_paginated_response(serializer.data)
     
 
-    def post(self, request): # this for creating new user and send welcome email after craetion
+    # def post(self, request): # this for creating new user and send welcome email after craetion
+    #     serializer = UserSerializer(data=request.data)
+
+    #     if serializer.is_valid():
+    #         user = serializer.save()
+    #         try:
+    #             send_mail(
+    #             subject='Welcome to Our Platform',
+    #             message=f'Hello {user.first_name}, your account created successfully.',
+    #             from_email=settings.DEFAULT_FROM_EMAIL,  
+    #             recipient_list=[user.email],
+    #             fail_silently=False,
+    #             )
+             
+    #         except Exception as e:
+    #             print(f"Failed to send email >>>>>>> : {str(e)}")
+    #             return Response(
+    #                 {"error": f"User created but failed to send email: {str(e)}"},
+    #                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    #             )
+
+    #         return Response(
+    #             UserSerializer(user).data,
+    #             status=status.HTTP_201_CREATED 
+    #         )
+
+    #     return Response(
+    #         serializer.errors,
+    #         status=status.HTTP_400_BAD_REQUEST 
+    #     )  
+    def post(self, request):
+
+        # Only Admin and Super Admin can create users
+        if request.user.profile is None or request.user.profile.name.strip().casefold() not in ["admin", "super admin"]:
+            return Response(
+                {"error": "Only Admin or Super Admin can create users."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         serializer = UserSerializer(data=request.data)
 
         if serializer.is_valid():
             user = serializer.save()
+
             try:
                 send_mail(
-                subject='Welcome to Our Platform',
-                message=f'Hello {user.first_name}, your account created successfully.',
-                from_email=settings.DEFAULT_FROM_EMAIL,  
-                recipient_list=[user.email],
-                fail_silently=False,
+                    subject='Welcome to Our Platform',
+                    message=f'Hello {user.first_name}, your account created successfully.',
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
                 )
-             
+
             except Exception as e:
                 print(f"Failed to send email >>>>>>> : {str(e)}")
                 return Response(
@@ -97,13 +136,13 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
 
             return Response(
                 UserSerializer(user).data,
-                status=status.HTTP_201_CREATED 
+                status=status.HTTP_201_CREATED
             )
 
         return Response(
             serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST 
-        )  
+            status=status.HTTP_400_BAD_REQUEST
+        )
 class UserDetailAPI(APIView):
     permission_classes = [AllowAny]
 
