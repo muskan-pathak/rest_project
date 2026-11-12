@@ -58,6 +58,8 @@ class UserSerializer(serializers.ModelSerializer):
     gender = serializers.CharField(required=False,allow_blank=True,allow_null=True)
     blood_group = serializers.CharField( required=False,allow_blank=True,allow_null=True)
     status = serializers.CharField(required=False,allow_blank=True,allow_null=True)
+    modified_by = serializers.SerializerMethodField(read_only=True)
+    modified_at = serializers.DateTimeField(read_only=True)
     # user_name = serializers.CharField(required=False,allow_blank=True,allow_null=True)
 
     class Meta:
@@ -65,7 +67,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id','first_name','last_name','email','password', 'profile',
         'profile_details','date_of_birth','gender', 'nationality','image','blood_group',
         'phone','permanent_address','current_address','emergency_contact_name','emergency_contact_number',
-        'emergency_contact_relationship','status',]
+        'emergency_contact_relationship','status','modified_by','modified_at',]
     
         extra_kwargs = {
             'email': {'required': True,'allow_blank': False,},
@@ -122,6 +124,22 @@ class UserSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+    def get_modified_by(self, obj):
+
+        if obj.modified_by is None:
+            return None
+
+        return {
+            'id': obj.modified_by.id,
+            'first_name': obj.modified_by.first_name,
+            'last_name': obj.modified_by.last_name,
+            'email': obj.modified_by.email,
+            'profile': {
+                'id': obj.modified_by.profile.id,
+                'name': obj.modified_by.profile.name
+            } if obj.modified_by.profile else None
+        }
 
 
 
@@ -299,16 +317,6 @@ class ProjectSerializer(serializers.ModelSerializer):
        
         read_only_fields = ['id','start_date','created_at','created_by','modified_at','modified_by','attachments',]
 
-      # client/manager input me id, output me id/first_name/last_name/email
-    # def to_representation(self, instance):
-    #     data= super().to_representation(instance)
-    #     for field in ['client','manager']:
-    #         obj= getattr(instance, field)
-    #         if obj is None:
-    #             data[field]= None
-    #         else:
-    #             data[field]= {"id": obj.id, "first_name": obj.first_name, "last_name": obj.last_name, "email": obj.email}
-    #     return data   
     def to_representation(self, instance):
         data = super().to_representation(instance)
 
@@ -537,8 +545,6 @@ class ProjectAttachmentSerializer(serializers.ModelSerializer):
 
 
 class ProjectTaskSerializer(serializers.ModelSerializer):
-
-
     project = serializers.PrimaryKeyRelatedField(    # Input mein ID accept hongi
         queryset=Project.objects.all(),required=True)
 
@@ -551,12 +557,9 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
     title = serializers.CharField(required=True,allow_blank=False,allow_null=False)
     description = serializers.CharField(required=True,allow_blank=False,allow_null=False) 
     status = serializers.CharField(required=False)
-    task_start_date = serializers.DateField(read_only=True)
-
     class Meta:
         model = ProjectTask
-
-        fields = ['id','title','description','status','task_start_date','deadline_date',
+        fields = ['id','title','description','status','deadline_date',
                   'completion_date','is_deleted','project','assign_by','assign_to',
                   'created_at','created_by','updated_at','updated_by',]
             
@@ -615,17 +618,36 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
             "Enter a valid task status."
         )
 
-
-    def validate(self, attrs):      # Unique title validation within the same project
+    def validate(self, attrs):
 
         project = attrs.get(
-            'project',self.instance.project if self.instance else None)
-            
-        title = attrs.get('title',self.instance.title if self.instance else None)
+            'project',
+            self.instance.project if self.instance else None
+        )
+
+        title = attrs.get(
+            'title',
+            self.instance.title if self.instance else None
+        )
+
+        # Project Start Date validation - only during CREATE
+        if not self.instance and project:
+            from django.utils import timezone
+
+            if project.start_date and project.start_date > timezone.localdate():
+                raise serializers.ValidationError({
+                    'project': 'Project start date cannot be after task creation date.'
+                })
+
+        # Unique title validation
         if project and title:
-            queryset = ProjectTask.objects.filter(project=project,title__iexact=title)
+            queryset = ProjectTask.objects.filter(
+                project=project,
+                title__iexact=title
+            )
+
             if self.instance:
-                queryset = queryset.exclude(id=self.instance.id)      
+                queryset = queryset.exclude(id=self.instance.id)
 
             if queryset.exists():
                 raise serializers.ValidationError({
@@ -633,6 +655,25 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
                 })
 
         return attrs
+
+
+    # def validate(self, attrs):      # Unique title validation within the same project
+
+    #     project = attrs.get(
+    #         'project',self.instance.project if self.instance else None)
+            
+    #     title = attrs.get('title',self.instance.title if self.instance else None)
+    #     if project and title:
+    #         queryset = ProjectTask.objects.filter(project=project,title__iexact=title)
+    #         if self.instance:
+    #             queryset = queryset.exclude(id=self.instance.id)      
+
+    #         if queryset.exists():
+    #             raise serializers.ValidationError({
+    #                 'title': 'This task title already exists in this project.'
+    #             })
+
+    #     return attrs
 
     # Common User Details
     def get_user_details(self, user):
@@ -663,7 +704,8 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
                 'id': instance.project.id,
                 'project_title': instance.project.project_title,
                 'project_type': instance.project.project_type,
-                'project_status': instance.project.project_status
+                'project_status': instance.project.project_status,
+                'start_date': instance.project.start_date
             }
         else:
             data['project'] = None

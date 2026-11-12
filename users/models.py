@@ -57,6 +57,8 @@ class User(AbstractUser):
     otp_request_count = models.PositiveIntegerField(default=0,null=True, blank=True)
     otp_request_window_start = models.DateTimeField(null= True, blank = True)
     otp_blocked_until = models.DateTimeField(null = True, blank= True)
+    modified_by = models.ForeignKey('self',on_delete=models.SET_NULL,null=True,blank=True,related_name='modified_users')
+    modified_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.email
@@ -167,10 +169,8 @@ class ProjectTask(models.Model):
     title = models.CharField(max_length=200, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     status = models.CharField(max_length=20,choices=STATUS_CHOICES,default='Pending',null=True,blank=True)
-    task_start_date = models.DateField(auto_now_add=True,null=True, blank=True)
     deadline_date = models.DateField(null=True, blank=True)
     completion_date = models.DateField(null=True, blank=True)
-    # restore_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='restored_tasks',null=True,blank=True) 
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     created_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='created_tasks',null=True,blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)

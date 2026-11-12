@@ -144,13 +144,29 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
             status=status.HTTP_400_BAD_REQUEST
         )
 class UserDetailAPI(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get_user(self, pk):
         try:
             return User.objects.get(pk=pk, status='Active')
         except User.DoesNotExist:
             return None
+
+    def check_admin_permission(self, request):
+
+        if (
+            request.user.profile is None
+            or request.user.profile.name.strip().casefold()
+            not in ['admin', 'super admin']
+        ):
+            return Response(
+                {
+                    "error": "Only Admin and Super Admin can update or delete users."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        return None
 
     def get(self, request, pk):
         user = self.get_user(pk)  # find active user by primary key by calling helper method
@@ -164,7 +180,14 @@ class UserDetailAPI(APIView):
         serializer = UserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def put(self, request, pk): 
+    # def put(self, request, pk): 
+    #     user = self.get_user(pk)
+    def put(self, request, pk):
+
+        permission_response = self.check_admin_permission(request)
+        if permission_response:
+            return permission_response
+
         user = self.get_user(pk)
 
         if user is None:
@@ -183,8 +206,15 @@ class UserDetailAPI(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+    # def patch(self, request, pk):
 
-    def patch(self, request, pk):  # update partial data 
+    #     user = self.get_user(pk)
+    def patch(self, request, pk):
+
+        permission_response = self.check_admin_permission(request)
+        if permission_response:
+            return permission_response
+
         user = self.get_user(pk)
 
         if user is None:
@@ -193,6 +223,23 @@ class UserDetailAPI(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Soft Delete
+        if request.data.get('status') == 'Inactive':
+
+            user.status = 'Inactive'
+            user.modified_by = request.user
+            user.save(update_fields=[
+                'status',
+                'modified_by',
+                'modified_at'
+            ])
+
+            return Response(
+                {"message": "User deleted successfully"},
+                status=status.HTTP_200_OK
+            )
+
+        # Normal Partial Update
         serializer = UserSerializer(
             user,
             data=request.data,
@@ -200,31 +247,19 @@ class UserDetailAPI(APIView):
         )
 
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            serializer.save(
+                modified_by=request.user
+            )
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
 
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-
-    def delete(self, request, pk):
-        user = self.get_user(pk)
-
-        if user is None:
-            return Response(
-                {"error": "User not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        user.status = 'Inactive' # mark user as inactive not deete it
-        user.save(update_fields=['status'])
-
-        return Response(
-            {"message": "User deactivated successfully"},
-            status=status.HTTP_200_OK
-        )
-
 class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -524,8 +559,8 @@ class ClientDetailAPI(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-   
-    def patch(self, request, pk): # update partial data of client
+    def patch(self, request, pk):
+
         client = self.get_client(pk)
 
         if client is None:
@@ -534,6 +569,26 @@ class ClientDetailAPI(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Soft Delete - Empty PATCH Request
+        if not request.data:
+
+            client.status = 'Inactive'
+            client.modified_by = request.user
+
+            client.save(
+                update_fields=[
+                    'status',
+                    'modified_by',
+                    'modified_at'
+                ]
+            )
+
+            return Response(
+                {"message": "Client deleted successfully"},
+                status=status.HTTP_200_OK
+            )
+
+        # Normal Partial Update
         serializer = ClientSerializer(
             client,
             data=request.data,
@@ -542,31 +597,60 @@ class ClientDetailAPI(APIView):
 
         if serializer.is_valid():
             serializer.save(modified_by=request.user)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
 
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-    def delete(self, request, pk):
-        client = self.get_client(pk)
 
-        if client is None:
-            return Response(
-                {"error": "Client not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+   
+    # def patch(self, request, pk): # update partial data of client
+    #     client = self.get_client(pk)
 
-        client.status = 'Inactive'
-        client.modified_by = request.user
-        client.save(
-            update_fields=['status', 'modified_by', 'modified_at']
-        )
+    #     if client is None:
+    #         return Response(
+    #             {"error": "Client not found"},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
 
-        return Response(
-            {"message": "Client deactivated successfully"},
-            status=status.HTTP_200_OK
-        )
+    #     serializer = ClientSerializer(
+    #         client,
+    #         data=request.data,
+    #         partial=True
+    #     )
+
+    #     if serializer.is_valid():
+    #         serializer.save(modified_by=request.user)
+    #         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    #     return Response(
+    #         serializer.errors,
+    #         status=status.HTTP_400_BAD_REQUEST
+    #     )
+    # def delete(self, request, pk):
+    #     client = self.get_client(pk)
+
+    #     if client is None:
+    #         return Response(
+    #             {"error": "Client not found"},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+
+    #     client.status = 'Inactive'
+    #     client.modified_by = request.user
+    #     client.save(
+    #         update_fields=['status', 'modified_by', 'modified_at']
+    #     )
+
+    #     return Response(
+    #         {"message": "Client deactivated successfully"},
+    #         status=status.HTTP_200_OK
+    #     )
 
 def send_project_notification(project):
     client = project.client
@@ -938,8 +1022,11 @@ class ProjectDetailAPI(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+        
+        
     @transaction.atomic
     def patch(self, request, pk):
+
         project = self.get_project(pk)
 
         if project is None:
@@ -948,6 +1035,28 @@ class ProjectDetailAPI(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Project Soft Delete - Empty PATCH Request
+        if not request.data:
+
+            project.is_deleted = True
+            project.deleted_at = timezone.now()
+            project.modified_by = request.user
+
+            project.save(
+                update_fields=[
+                    'is_deleted',
+                    'deleted_at',
+                    'modified_by',
+                    'modified_at'
+                ]
+            )
+
+            return Response(
+                {'message': 'Project deleted successfully.'},
+                status=status.HTTP_200_OK
+            )
+
+        # Normal Partial Update
         serializer = ProjectSerializer(
             project,
             data=request.data,
@@ -969,6 +1078,40 @@ class ProjectDetailAPI(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+
+    # @transaction.atomic
+    # def patch(self, request, pk):
+    #     project = self.get_project(pk)
+
+    #     if project is None:
+    #         return Response(
+    #             {'error': 'Project not found.'},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+
+    #     serializer = ProjectSerializer(
+    #         project,
+    #         data=request.data,
+    #         partial=True,
+    #         context={'request': request}
+    #     )
+
+    #     if serializer.is_valid():
+    #         project = serializer.save()
+
+    #         response_serializer = ProjectSerializer(
+    #             project,
+    #             context={'request': request}
+    #         )
+
+    #         return Response(response_serializer.data)
+
+    #     return Response(
+    #         serializer.errors,
+    #         status=status.HTTP_400_BAD_REQUEST
+    #     )
 
     def delete(self, request, pk, attachment_id=None):
 
@@ -1583,7 +1726,8 @@ class ProjectTaskDetailAPI(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # PATCH - Partial update
+    
+    # PATCH - Partial Update / Soft Delete
     def patch(self, request, pk):
 
         task = self.get_task(pk)
@@ -1594,6 +1738,26 @@ class ProjectTaskDetailAPI(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Soft Delete - Empty PATCH Request
+        if not request.data:
+
+            task.is_deleted = True
+            task.updated_by = request.user
+
+            task.save(
+                update_fields=[
+                    'is_deleted',
+                    'updated_by',
+                    'updated_at'
+                ]
+            )
+
+            return Response(
+                {'message': 'Task deleted successfully.'},
+                status=status.HTTP_200_OK
+            )
+
+        # Normal Partial Update
         serializer = ProjectTaskSerializer(
             task,
             data=request.data,
@@ -1622,32 +1786,72 @@ class ProjectTaskDetailAPI(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+
+    # # PATCH - Partial update
+    # def patch(self, request, pk):
+
+    #     task = self.get_task(pk)
+
+    #     if task is None:
+    #         return Response(
+    #             {'error': 'Task not found.'},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+
+    #     serializer = ProjectTaskSerializer(
+    #         task,
+    #         data=request.data,
+    #         partial=True,
+    #         context={'request': request}
+    #     )
+
+    #     if serializer.is_valid():
+
+    #         task = serializer.save(
+    #             updated_by=request.user
+    #         )
+
+    #         response_serializer = ProjectTaskSerializer(
+    #             task,
+    #             context={'request': request}
+    #         )
+
+    #         return Response(
+    #             response_serializer.data,
+    #             status=status.HTTP_200_OK
+    #         )
+
+    #     return Response(
+    #         serializer.errors,
+    #         status=status.HTTP_400_BAD_REQUEST
+    #     )
+
     # DELETE - Soft delete
-    def delete(self, request, pk):
+    # def delete(self, request, pk):
 
-        task = self.get_task(pk)
+    #     task = self.get_task(pk)
 
-        if task is None:
-            return Response(
-                {'error': 'Task not found.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+    #     if task is None:
+    #         return Response(
+    #             {'error': 'Task not found.'},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
 
-        task.is_deleted = True
-        task.updated_by = request.user
+    #     task.is_deleted = True
+    #     task.updated_by = request.user
 
-        task.save(
-            update_fields=[
-                'is_deleted',
-                'updated_by',
-                'updated_at'
-            ]
-        )
+    #     task.save(
+    #         update_fields=[
+    #             'is_deleted',
+    #             'updated_by',
+    #             'updated_at'
+    #         ]
+    #     )
 
-        return Response(
-            {'message': 'Task deleted successfully.'},
-            status=status.HTTP_200_OK
-        )
+    #     return Response(
+    #         {'message': 'Task deleted successfully.'},
+    #         status=status.HTTP_200_OK
+    #     )
 
 
 
