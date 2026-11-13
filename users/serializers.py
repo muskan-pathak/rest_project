@@ -42,22 +42,17 @@ class ProfileIdOrNameField(serializers.RelatedField):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    # profile = ProfileIdOrNameField(
-    #     queryset=Profile.objects.all(),
-    #     required=False,
-    #     allow_null=True)
-    # profile = serializers.PrimaryKeyRelatedField(
-    # queryset=Profile.objects.all(),required=True,allow_null=False)
     profile = serializers.PrimaryKeyRelatedField(
     queryset=Profile.objects.all(),required=True,allow_null=False,
     error_messages={
         'does_not_exist': 'Profile with ID "{pk_value}" does not exist. Please enter a valid profile ID.'
     })
-    profile_details = serializers.SerializerMethodField(read_only=True)
-    # profile_details = serializers.SerializerMethodField(read_only=True)     
+    profile_details = serializers.SerializerMethodField(read_only=True)    
     gender = serializers.CharField(required=False,allow_blank=True,allow_null=True)
     blood_group = serializers.CharField( required=False,allow_blank=True,allow_null=True)
     status = serializers.CharField(required=False,allow_blank=True,allow_null=True)
+    created_by = serializers.SerializerMethodField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
     modified_by = serializers.SerializerMethodField(read_only=True)
     modified_at = serializers.DateTimeField(read_only=True)
     # user_name = serializers.CharField(required=False,allow_blank=True,allow_null=True)
@@ -67,7 +62,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id','first_name','last_name','email','password', 'profile',
         'profile_details','date_of_birth','gender', 'nationality','image','blood_group',
         'phone','permanent_address','current_address','emergency_contact_name','emergency_contact_number',
-        'emergency_contact_relationship','status','modified_by','modified_at',]
+        'emergency_contact_relationship','status','created_by','created_at','modified_by','modified_at',]
     
         extra_kwargs = {
             'email': {'required': True,'allow_blank': False,},
@@ -125,6 +120,21 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+    def get_created_by(self, obj):
+        if obj.created_by is None:
+            return None
+
+        return {
+            'id': obj.created_by.id,
+            'first_name': obj.created_by.first_name,
+            'last_name': obj.created_by.last_name,
+            'email': obj.created_by.email,
+            'profile': {
+                'id': obj.created_by.profile.id,
+                'name': obj.created_by.profile.name
+            } if obj.created_by.profile else None
+        }
+
     def get_modified_by(self, obj):
 
         if obj.modified_by is None:
@@ -150,21 +160,28 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'is_default']
         read_only_fields = ['is_default']
 
-    SYSTEM_PROFILES = [
-        'Super Admin',
-        'Admin',
-        'Manager',
-        'Team Leader',
-        'Developer',
-        'Human Resource',
-    ]
+    SYSTEM_PROFILES = ['Super Admin','Admin','Manager','Team Leader','Developer','Human Resource',]  
 
     def validate_name(self, value):
+
+    # Check original input type
+        raw_name = self.initial_data.get('name')
+
+        if not isinstance(raw_name, str):
+            raise serializers.ValidationError(
+                "Profile name must be a string."
+            )
+
         value = value.strip()
 
         if not value:
             raise serializers.ValidationError(
                 "Profile name cannot be empty."
+            )
+
+        if not value.replace(" ", "").isalpha():
+            raise serializers.ValidationError(
+                "Profile name must contain only alphabets."
             )
 
         queryset = Profile.objects.filter(name__iexact=value)
@@ -178,6 +195,25 @@ class ProfileSerializer(serializers.ModelSerializer):
             )
 
         return value
+    # def validate_name(self, value):
+    #     value = value.strip()
+
+    #     if not value:
+    #         raise serializers.ValidationError(
+    #             "Profile name cannot be empty."
+    #         )
+
+    #     queryset = Profile.objects.filter(name__iexact=value)
+
+    #     if self.instance:
+    #         queryset = queryset.exclude(pk=self.instance.pk)
+
+    #     if queryset.exists():
+    #         raise serializers.ValidationError(
+    #             "A profile with this name already exists."
+    #         )
+
+    #     return value
 
     def create(self, validated_data):
         name = validated_data['name']

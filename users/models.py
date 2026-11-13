@@ -4,9 +4,7 @@ from rest_framework.utils.field_mapping import get_field_kwargs
 
 class User(AbstractUser):
     email = models.EmailField(unique = True, null=True, blank=True)
-    # user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
-    # first_name = models.CharField(max_length=100,null = True, blank = True)
-    # last_name = models.CharField(max_length=100,null = True, blank = True)
+    user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
 
     gender_choices = [
         ('Male', 'Male'),
@@ -27,16 +25,7 @@ class User(AbstractUser):
         ('Active', 'Active'),
         ('Inactive', 'Inactive'),]
 
-    profile = models.ForeignKey(
-    'Profile',
-    on_delete=models.SET_NULL,
-    null=True,
-    blank=True,
-    related_name='users')
-
-
-    
-    # profiles = models.CharField(max_length=52,choices=Profile_Choices,default='Standard',null=True,blank=True)
+    profile = models.ForeignKey('Profile',on_delete=models.SET_NULL,null=True,blank=True,related_name='users')   
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=12, choices=gender_choices, blank = True, null= True)
     nationality = models.CharField(max_length=100, blank=True, null=True)
@@ -48,15 +37,14 @@ class User(AbstractUser):
     emergency_contact_name = models.CharField(max_length=100, blank=True,null=True)
     emergency_contact_number = models.CharField(max_length=15, blank=True,null=True)
     emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
-    # password = models.CharField("password", max_length=128, null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status_Choices, default='Active',blank=True, null=True)
     otp_hash = models.CharField(max_length=128, blank=True, null=True) 
     otp_created_at = models.DateTimeField(null=True, blank=True)
     otp_expires_at = models.DateTimeField(null=True, blank=True)
-    otp_is_used = models.BooleanField(default=False,null=True, blank=True)
     otp_request_count = models.PositiveIntegerField(default=0,null=True, blank=True)
     otp_request_window_start = models.DateTimeField(null= True, blank = True)
-    otp_blocked_until = models.DateTimeField(null = True, blank= True)
+    created_by = models.ForeignKey('self',on_delete=models.SET_NULL,null=True,blank=True,related_name='created_users')
+    created_at = models.DateTimeField(auto_now_add=True)
     modified_by = models.ForeignKey('self',on_delete=models.SET_NULL,null=True,blank=True,related_name='modified_users')
     modified_at = models.DateTimeField(auto_now=True)
 

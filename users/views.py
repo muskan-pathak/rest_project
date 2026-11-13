@@ -17,10 +17,6 @@ from .serializers import (UserSerializer,ClientSerializer,LoginSerializer,SendOT
 ForgotPasswordSerializer,ResetPasswordSerializer,ProjectSerializer,ProjectAttachmentSerializer,ProfileSerializer,ProjectTaskSerializer,TaskCommentSerializer)
 from .utils import validate_user_otp, send_limited_otp
 import logging
-# class Pagination(PageNumberPagination):
-#     page_size = 5
-#     page_size_query_param = 'page_size'
-#     max_page_size = 100
 
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
     permission_classes = [IsAuthenticated] # this for allowing any user to acess this view
@@ -116,7 +112,7 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
         serializer = UserSerializer(data=request.data)
 
         if serializer.is_valid():
-            user = serializer.save()
+            user = serializer.save(created_by=request.user)
 
             try:
                 send_mail(
@@ -161,7 +157,7 @@ class UserDetailAPI(APIView):
         ):
             return Response(
                 {
-                    "error": "Only Admin and Super Admin can update or delete users."
+                    "error": "Only Admin and Super Admin can get update or delete users."
                 },
                 status=status.HTTP_403_FORBIDDEN
             )
@@ -169,7 +165,13 @@ class UserDetailAPI(APIView):
         return None
 
     def get(self, request, pk):
-        user = self.get_user(pk)  # find active user by primary key by calling helper method
+
+        permission_response = self.check_admin_permission(request)
+
+        if permission_response:
+            return permission_response
+
+        user = self.get_user(pk)
 
         if user is None:
             return Response(
@@ -178,7 +180,20 @@ class UserDetailAPI(APIView):
             )
 
         serializer = UserSerializer(user)
+
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # def get(self, request, pk):
+    #     user = self.get_user(pk)  # find active user by primary key by calling helper method
+
+    #     if user is None:
+    #         return Response(
+    #             {"error": "User not found"},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+
+    #     serializer = UserSerializer(user)
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
 
     # def put(self, request, pk): 
     #     user = self.get_user(pk)
@@ -361,8 +376,18 @@ class VerifyOTPAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user.otp_is_used = True 
-        user.save(update_fields=["otp_is_used"]) 
+        user.otp_hash = None
+        user.otp_created_at = None
+        user.otp_expires_at = None
+
+        user.save(update_fields=[
+            "otp_hash",
+            "otp_created_at",
+            "otp_expires_at"
+        ])
+
+        # user.otp_is_used = True 
+        # user.save(update_fields=["otp_is_used"]) 
 
         return Response(
             {"message": "OTP verified successfully"},
@@ -434,8 +459,13 @@ class ResetPasswordAPIView(APIView):
             )
 
         user.set_password(new_password)
-        user.otp_is_used = True
-        user.save(update_fields=["password", "otp_is_used"])
+        user.otp_hash = None
+        user.otp_created_at = None
+        user.otp_expires_at = None
+        user.save(update_fields=["password","otp_hash","otp_created_at","otp_expires_at"])
+        # user.set_password(new_password)
+        # user.otp_is_used = True
+        # user.save(update_fields=["password", "otp_is_used"])
 
         return Response(
             {"message": "Password reset successfully"},
