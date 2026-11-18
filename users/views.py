@@ -21,7 +21,18 @@ import logging
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
     permission_classes = [IsAuthenticated] # this for allowing any user to acess this view
     def get(self, request):
-        # users = User.objects.filter(status='Active')
+        if (
+            request.user.profile is None
+            or request.user.profile.name.strip().casefold()
+            not in ['admin', 'super admin']
+        ):
+                return Response(
+                    {
+                        "error": "Only Admin and Super Admin can get users."
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            # users = User.objects.filter(status='Active')
         user_status = request.query_params.get('status', 'Active')
         users = User.objects.filter(status__iexact=user_status)
 
@@ -69,40 +80,7 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
 
         return paginator.get_paginated_response(serializer.data)
     
-
-    # def post(self, request): # this for creating new user and send welcome email after craetion
-    #     serializer = UserSerializer(data=request.data)
-
-    #     if serializer.is_valid():
-    #         user = serializer.save()
-    #         try:
-    #             send_mail(
-    #             subject='Welcome to Our Platform',
-    #             message=f'Hello {user.first_name}, your account created successfully.',
-    #             from_email=settings.DEFAULT_FROM_EMAIL,  
-    #             recipient_list=[user.email],
-    #             fail_silently=False,
-    #             )
-             
-    #         except Exception as e:
-    #             print(f"Failed to send email >>>>>>> : {str(e)}")
-    #             return Response(
-    #                 {"error": f"User created but failed to send email: {str(e)}"},
-    #                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    #             )
-
-    #         return Response(
-    #             UserSerializer(user).data,
-    #             status=status.HTTP_201_CREATED 
-    #         )
-
-    #     return Response(
-    #         serializer.errors,
-    #         status=status.HTTP_400_BAD_REQUEST 
-    #     )  
-    def post(self, request):
-
-        # Only Admin and Super Admin can create users
+    def post(self, request): # only admin and superadmin can create user
         if request.user.profile is None or request.user.profile.name.strip().casefold() not in ["admin", "super admin"]:
             return Response(
                 {"error": "Only Admin or Super Admin can create users."},
@@ -112,7 +90,7 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
         serializer = UserSerializer(data=request.data)
 
         if serializer.is_valid():
-            user = serializer.save(created_by=request.user)
+            user = serializer.save(created_by=request.user,modified_by=request.user)
 
             try:
                 send_mail(
@@ -165,82 +143,45 @@ class UserDetailAPI(APIView):
         return None
 
     def get(self, request, pk):
-
         permission_response = self.check_admin_permission(request)
-
         if permission_response:
             return permission_response
-
         user = self.get_user(pk)
-
         if user is None:
-            return Response(
-                {"error": "User not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "User not found"},status=status.HTTP_404_NOT_FOUND)     
 
         serializer = UserSerializer(user)
-
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # def get(self, request, pk):
-    #     user = self.get_user(pk)  # find active user by primary key by calling helper method
-
-    #     if user is None:
-    #         return Response(
-    #             {"error": "User not found"},
-    #             status=status.HTTP_404_NOT_FOUND
-    #         )
-
-    #     serializer = UserSerializer(user)
-    #     return Response(serializer.data, status=status.HTTP_200_OK)
-
-    # def put(self, request, pk): 
-    #     user = self.get_user(pk)
     def put(self, request, pk):
-
         permission_response = self.check_admin_permission(request)
         if permission_response:
             return permission_response
-
         user = self.get_user(pk)
-
         if user is None:
             return Response(
                 {"error": "User not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-
         serializer = UserSerializer(user, data=request.data)
-
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(modified_by=request.user)
             return Response(serializer.data, status=status.HTTP_200_OK)
-
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-    # def patch(self, request, pk):
-
-    #     user = self.get_user(pk)
     def patch(self, request, pk):
-
         permission_response = self.check_admin_permission(request)
         if permission_response:
             return permission_response
-
         user = self.get_user(pk)
-
         if user is None:
             return Response(
                 {"error": "User not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-
-        # Soft Delete
-        if request.data.get('status') == 'Inactive':
-
+        if request.data.get('status') == 'Inactive': # soft delete
             user.status = 'Inactive'
             user.modified_by = request.user
             user.save(update_fields=[
@@ -248,28 +189,18 @@ class UserDetailAPI(APIView):
                 'modified_by',
                 'modified_at'
             ])
-
             return Response(
                 {"message": "User deleted successfully"},
                 status=status.HTTP_200_OK
             )
-
-        # Normal Partial Update
-        serializer = UserSerializer(
-            user,
-            data=request.data,
-            partial=True
-        )
-
+    
+        serializer = UserSerializer( # partial update
+            user,data=request.data,partial=True)
+        
         if serializer.is_valid():
-            serializer.save(
-                modified_by=request.user
-            )
-
+            serializer.save(modified_by=request.user) 
             return Response(
-                serializer.data,
-                status=status.HTTP_200_OK
-            )
+                serializer.data,status=status.HTTP_200_OK)    
 
         return Response(
             serializer.errors,
@@ -418,16 +349,12 @@ class ForgotPasswordAPIView(APIView):
             )
 
         send_limited_otp(
-            user,
-            "Password Reset OTP",
-            "Your password reset OTP is "
-        )
-
+            user,"Password Reset OTP","Your password reset OTP is ")
+     
         return Response(
             {"message": "Password reset OTP sent successfully"},
             status=status.HTTP_200_OK
         )
-
 
 
 class ResetPasswordAPIView(APIView):
@@ -463,9 +390,6 @@ class ResetPasswordAPIView(APIView):
         user.otp_created_at = None
         user.otp_expires_at = None
         user.save(update_fields=["password","otp_hash","otp_created_at","otp_expires_at"])
-        # user.set_password(new_password)
-        # user.otp_is_used = True
-        # user.save(update_fields=["password", "otp_is_used"])
 
         return Response(
             {"message": "Password reset successfully"},
@@ -479,8 +403,7 @@ class ClientListCreateAPI(APIView):
     def get(self, request): # to get the list of clients
         client_status = request.query_params.get('status', 'Active')
         clients = Client.objects.filter(status__iexact=client_status) 
-         # General Search
-        search = request.query_params.get("search", "").strip()
+        search = request.query_params.get("search", "").strip() # general search
 
         if search:
             for word in search.split():
@@ -546,10 +469,8 @@ class ClientListCreateAPI(APIView):
         )
 
 
-
 class ClientDetailAPI(APIView):
     permission_classes = [IsAuthenticated]
-
     def get_client(self, pk):
         try:
             return Client.objects.get(pk=pk, status='Active')
@@ -599,69 +520,30 @@ class ClientDetailAPI(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Soft Delete - Empty PATCH Request
-        if not request.data:
-
+        if not request.data: # soft delete 
             client.status = 'Inactive'
             client.modified_by = request.user
 
             client.save(
-                update_fields=[
-                    'status',
-                    'modified_by',
-                    'modified_at'
-                ]
-            )
-
+                update_fields=['status','modified_by','modified_at'])
+            
             return Response(
                 {"message": "Client deleted successfully"},
                 status=status.HTTP_200_OK
             )
 
         # Normal Partial Update
-        serializer = ClientSerializer(
-            client,
-            data=request.data,
-            partial=True
-        )
-
+        serializer = ClientSerializer(client,data=request.data,partial=True)      
         if serializer.is_valid():
             serializer.save(modified_by=request.user)
 
             return Response(
-                serializer.data,
-                status=status.HTTP_200_OK
-            )
+                serializer.data,status=status.HTTP_200_OK)    
 
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-
-   
-    # def patch(self, request, pk): # update partial data of client
-    #     client = self.get_client(pk)
-
-    #     if client is None:
-    #         return Response(
-    #             {"error": "Client not found"},
-    #             status=status.HTTP_404_NOT_FOUND
-    #         )
-
-    #     serializer = ClientSerializer(
-    #         client,
-    #         data=request.data,
-    #         partial=True
-    #     )
-
-    #     if serializer.is_valid():
-    #         serializer.save(modified_by=request.user)
-    #         return Response(serializer.data, status=status.HTTP_200_OK)
-
-    #     return Response(
-    #         serializer.errors,
-    #         status=status.HTTP_400_BAD_REQUEST
-    #     )
     # def delete(self, request, pk):
     #     client = self.get_client(pk)
 
@@ -798,18 +680,32 @@ Project Management Team
 class ProjectListCreateAPI(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    # def get_queryset(self):
+    #     return (
+    #         Project.objects
+    #         .filter(is_deleted=False)
+    #         .exclude(project_status='Inactive')
+    #         .prefetch_related('attachments')
+    #         .order_by('-id')
+    #     )
     def get_queryset(self):
         return (
             Project.objects
             .filter(is_deleted=False)
             .exclude(project_status='Inactive')
+            .select_related(
+                'client',
+                'client_user',
+                'client_user__profile',
+                'manager',
+                'manager__profile'
+            )
             .prefetch_related('attachments')
             .order_by('-id')
         )
 
 
     def get(self, request):
-        # projects = self.get_queryset()
         project_status_filter = request.query_params.get('status', 'Active')
 
         if project_status_filter.lower() == 'inactive':
@@ -830,6 +726,10 @@ class ProjectListCreateAPI(APIView):
                     Q(client__first_name__icontains=word) |
                     Q(client__last_name__icontains=word) |
                     Q(client__email__icontains=word) |
+                    Q(client_user__first_name__icontains=word) |
+                    Q(client_user__last_name__icontains=word) |
+                    Q(client_user__email__icontains=word) |
+                    Q(client_user__phone__icontains=word) |
                     Q(manager__first_name__icontains=word) |
                     Q(manager__last_name__icontains=word) |
                     Q(manager__email__icontains=word)
@@ -862,6 +762,11 @@ class ProjectListCreateAPI(APIView):
         client_last_name = request.query_params.get("client_last_name")
         client_username = request.query_params.get("client_username")
         client_email = request.query_params.get("client_email")
+        client_user = request.query_params.get('client_user', '').strip()
+        client_user_first_name = request.query_params.get('client_user_first_name', '').strip()
+        client_user_last_name = request.query_params.get('client_user_last_name', '').strip()
+        client_user_email = request.query_params.get('client_user_email', '').strip()
+        client_user_phone = request.query_params.get('client_user_phone', '').strip()
 
 
         if client_first_name:
@@ -872,19 +777,38 @@ class ProjectListCreateAPI(APIView):
             projects = projects.filter(client__last_name__icontains=client_last_name)
 
 
+        # if client_username:
+        #     projects = projects.filter(client__username__icontains=client_username)
         if client_username:
-            projects = projects.filter(client__username__icontains=client_username)
-
+            projects = projects.filter(
+                client_user__username__icontains=client_username
+            )
 
         if client_email:
             projects = projects.filter(client__email__icontains=client_email)
-        # elif client:
-        #     for word in client.split():
-        #         projects = projects.filter(
-        #             Q(client__first_name__icontains=word) |
-        #             Q(client__last_name__icontains=word) |
-        #             Q(client__email__icontains=word)
-        #         )
+
+        if client_user.isdigit():
+            projects = projects.filter(client_user_id=int(client_user))
+
+        if client_user_first_name:
+            projects = projects.filter(
+                client_user__first_name__icontains=client_user_first_name
+            )
+
+        if client_user_last_name:
+            projects = projects.filter(
+                client_user__last_name__icontains=client_user_last_name
+            )
+
+        if client_user_email:
+            projects = projects.filter(
+                client_user__email__icontains=client_user_email
+            )
+
+        if client_user_phone:
+            projects = projects.filter(
+                client_user__phone__icontains=client_user_phone
+            )
 
         if manager.isdigit():
             projects = projects.filter(manager_id=int(manager))
@@ -909,14 +833,6 @@ class ProjectListCreateAPI(APIView):
 
         if manager_email:
             projects = projects.filter(manager__email__icontains=manager_email)
-        # elif manager:
-        #     for word in manager.split():
-        #         projects = projects.filter(
-        #             Q(manager__first_name__icontains=word) |
-        #             Q(manager__last_name__icontains=word) |
-        #             Q(manager__username__icontains=word) |
-        #             Q(manager__email__icontains=word)
-        #         )
 
         paginator = PageNumberPagination()
         paginated_projects = paginator.paginate_queryset(projects, request)
@@ -999,6 +915,21 @@ class ProjectDetailAPI(APIView):
             .prefetch_related('attachments')
         )
 
+    # def get_queryset(self):
+    #     return (
+    #         Project.objects
+    #         .filter(is_deleted=False)
+    #         .exclude(project_status='Inactive')
+    #         .select_related(
+    #             'client',
+    #             'client_user',
+    #             'client_user__profile',
+    #             'manager',
+    #             'manager__profile'
+    #         )
+    #         .prefetch_related('attachments')
+    #     )
+
     def get_project(self, pk):
         try:
             return self.get_queryset().get(pk=pk)
@@ -1050,36 +981,23 @@ class ProjectDetailAPI(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
-        )
-
-        
+        )    
         
     @transaction.atomic
     def patch(self, request, pk):
-
         project = self.get_project(pk)
-
         if project is None:
             return Response(
                 {'error': 'Project not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
-        # Project Soft Delete - Empty PATCH Request
-        if not request.data:
-
+        if not request.data: # project soft delete
             project.is_deleted = True
             project.deleted_at = timezone.now()
             project.modified_by = request.user
 
             project.save(
-                update_fields=[
-                    'is_deleted',
-                    'deleted_at',
-                    'modified_by',
-                    'modified_at'
-                ]
-            )
+                update_fields=['is_deleted','modified_by','modified_at'])
 
             return Response(
                 {'message': 'Project deleted successfully.'},
@@ -1087,20 +1005,11 @@ class ProjectDetailAPI(APIView):
             )
 
         # Normal Partial Update
-        serializer = ProjectSerializer(
-            project,
-            data=request.data,
-            partial=True,
-            context={'request': request}
-        )
-
+        serializer = ProjectSerializer(project,data=request.data,partial=True,context={'request': request})
         if serializer.is_valid():
             project = serializer.save()
-
             response_serializer = ProjectSerializer(
-                project,
-                context={'request': request}
-            )
+                project,context={'request': request})
 
             return Response(response_serializer.data)
 
@@ -1184,17 +1093,12 @@ class ProjectDetailAPI(APIView):
         project.modified_by = request.user
 
         project.save(
-            update_fields=[
-                'is_deleted',
-                'deleted_at',
-                'modified_by',
-                'modified_at'
-            ]
-        )
-
+            update_fields=['is_deleted','deleted_at','modified_by','modified_at'])
+    
         return Response(
             {'message': 'Project deleted successfully.'},
             status=status.HTTP_200_OK
+            
         )
 class ProfileListCreateView(generics.ListCreateAPIView):
     queryset = Profile.objects.all().order_by('id')
@@ -1234,7 +1138,7 @@ class ProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         if profile.is_default:
             return Response(
-                {"message": "This is default profile. it can not be updated."},
+                {"message": "This is default profile. it cannot be updated."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -1658,7 +1562,7 @@ class ProjectTaskListCreateAPI(APIView):
 
             task = serializer.save(
                 created_by=request.user,
-                updated_by=request.user
+                modified_by=request.user
             )
 
             response_serializer = ProjectTaskSerializer(
@@ -1738,7 +1642,7 @@ class ProjectTaskDetailAPI(APIView):
         if serializer.is_valid():
 
             task = serializer.save(
-                updated_by=request.user
+                modified_by=request.user
             )
 
             response_serializer = ProjectTaskSerializer(
@@ -1755,32 +1659,22 @@ class ProjectTaskDetailAPI(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-
+  
     
-    # PATCH - Partial Update / Soft Delete
-    def patch(self, request, pk):
-
+    def patch(self, request, pk): # partial update and soft delete
         task = self.get_task(pk)
-
         if task is None:
             return Response(
                 {'error': 'Task not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Soft Delete - Empty PATCH Request
-        if not request.data:
-
+        if not request.data: # soft delete
             task.is_deleted = True
-            task.updated_by = request.user
+            task.modified_by = request.user
 
             task.save(
-                update_fields=[
-                    'is_deleted',
-                    'updated_by',
-                    'updated_at'
-                ]
-            )
+                update_fields=['is_deleted','modified_by', 'modified_at'])
 
             return Response(
                 {'message': 'Task deleted successfully.'},
@@ -1789,23 +1683,14 @@ class ProjectTaskDetailAPI(APIView):
 
         # Normal Partial Update
         serializer = ProjectTaskSerializer(
-            task,
-            data=request.data,
-            partial=True,
-            context={'request': request}
-        )
-
+            task,data=request.data,partial=True,context={'request': request})
+        
         if serializer.is_valid():
-
-            task = serializer.save(
-                updated_by=request.user
-            )
-
+            task = serializer.save(modified_by=request.user)
+             
             response_serializer = ProjectTaskSerializer(
-                task,
-                context={'request': request}
-            )
-
+                task,context={'request': request})
+    
             return Response(
                 response_serializer.data,
                 status=status.HTTP_200_OK
@@ -1817,44 +1702,7 @@ class ProjectTaskDetailAPI(APIView):
         )
 
 
-    # # PATCH - Partial update
-    # def patch(self, request, pk):
-
-    #     task = self.get_task(pk)
-
-    #     if task is None:
-    #         return Response(
-    #             {'error': 'Task not found.'},
-    #             status=status.HTTP_404_NOT_FOUND
-    #         )
-
-    #     serializer = ProjectTaskSerializer(
-    #         task,
-    #         data=request.data,
-    #         partial=True,
-    #         context={'request': request}
-    #     )
-
-    #     if serializer.is_valid():
-
-    #         task = serializer.save(
-    #             updated_by=request.user
-    #         )
-
-    #         response_serializer = ProjectTaskSerializer(
-    #             task,
-    #             context={'request': request}
-    #         )
-
-    #         return Response(
-    #             response_serializer.data,
-    #             status=status.HTTP_200_OK
-    #         )
-
-    #     return Response(
-    #         serializer.errors,
-    #         status=status.HTTP_400_BAD_REQUEST
-    #     )
+  
 
     # DELETE - Soft delete
     # def delete(self, request, pk):
@@ -1887,7 +1735,6 @@ class ProjectTaskDetailAPI(APIView):
 
 class TaskCommentListCreateAPI(APIView):
     permission_classes = [IsAuthenticated]
-
     def get_queryset(self):
         return (
             TaskComment.objects
@@ -1898,14 +1745,10 @@ class TaskCommentListCreateAPI(APIView):
 
     # GET - List all task comments
     def get(self, request):
-
         comments = self.get_queryset()
-
         task_id = request.query_params.get('task_id')
-
         if task_id:
             comments = comments.filter(task_id=task_id)
-
         paginator = PageNumberPagination()
         paginated_comments = paginator.paginate_queryset(
             comments,
@@ -1913,31 +1756,19 @@ class TaskCommentListCreateAPI(APIView):
         )
 
         serializer = TaskCommentSerializer(
-            paginated_comments,
-            many=True,
-            context={'request': request}
-        )
-
+            paginated_comments,many=True,context={'request': request})
+    
         return paginator.get_paginated_response(serializer.data)
 
-    # POST - Create new task comment
-    def post(self, request):
 
+    def post(self, request): # create comment
         serializer = TaskCommentSerializer(
             data=request.data,
             context={'request': request}
         )
-
         if serializer.is_valid():
-
-            comment = serializer.save(
-                user=request.user
-            )
-
-            response_serializer = TaskCommentSerializer(
-                comment,
-                context={'request': request}
-            )
+            comment = serializer.save(user=request.user)
+            response_serializer = TaskCommentSerializer(comment,context={'request': request})
 
             return Response(
                 response_serializer.data,
@@ -1951,7 +1782,6 @@ class TaskCommentListCreateAPI(APIView):
 
 class TaskCommentDetailAPI(APIView):
     permission_classes = [IsAuthenticated]
-
     def get_object(self, pk):
         return get_object_or_404(
             TaskComment.objects.select_related('task', 'user'),
@@ -1959,7 +1789,6 @@ class TaskCommentDetailAPI(APIView):
         
     def get(self, request, pk):     # for single task details
         comment = self.get_object(pk)
-
         serializer = TaskCommentSerializer(
             comment,context={'request': request})
 
@@ -1968,11 +1797,9 @@ class TaskCommentDetailAPI(APIView):
 
     def put(self, request, pk):
         comment = self.get_object(pk)
-
         serializer = TaskCommentSerializer(comment,data=request.data,context={'request': request})
         if serializer.is_valid():
             serializer.save()
-
             return Response(
                 serializer.data,
                 status=status.HTTP_200_OK
@@ -1982,11 +1809,8 @@ class TaskCommentDetailAPI(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-
-
     def patch(self, request, pk):
         comment = self.get_object(pk)
-
         serializer = TaskCommentSerializer(comment,data=request.data,partial=True,
             context={'request': request})
 
@@ -2006,7 +1830,6 @@ class TaskCommentDetailAPI(APIView):
     def delete(self, request, pk):  # hard delete comment
         comment = self.get_object(pk)
         comment.delete()
-
         return Response(
             {"message": "Task comment deleted successfully."},
             status=status.HTTP_200_OK

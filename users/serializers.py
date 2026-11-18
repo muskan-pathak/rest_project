@@ -150,17 +150,43 @@ class UserSerializer(serializers.ModelSerializer):
                 'name': obj.modified_by.profile.name
             } if obj.modified_by.profile else None
         }
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        if (
+            instance.profile
+            and instance.profile.name.strip().casefold() == 'client'
+        ):
+            return {
+                'id': data['id'],
+                'first_name': data['first_name'],
+                'last_name': data['last_name'],
+                'address': data['permanent_address'],
+                'nationality': data['nationality'],
+                'phone': data['phone'],
+                'email': data['email'],
+                'profile': {
+                    'id': instance.profile.id,
+                    'name': instance.profile.name,
+                },
+                'status': data['status'],
+                'created_at': data['created_at'],
+                'created_by': data['created_by'],
+                'modified_at': data['modified_at'],
+                'modified_by': data['modified_by'],
+            }
+
+        return data
 
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Profile
         fields = ['id', 'name', 'is_default']
         read_only_fields = ['is_default']
 
-    SYSTEM_PROFILES = ['Super Admin','Admin','Manager','Team Leader','Developer','Human Resource',]  
+    SYSTEM_PROFILES = ['Super Admin','Admin','Manager','Team Leader','Developer','Human Resource','Client',]  
 
     def validate_name(self, value):
 
@@ -348,7 +374,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = ['id','project_title','project_type','description','attachments','start_date','date_of_completion','project_status',
-                  'client','manager','created_at','created_by','modified_at','modified_by',
+                  'client','client_user','manager','created_at','created_by','modified_at','modified_by',
                   'new_attachments','delete_attachment_ids', ] 
        
         read_only_fields = ['id','start_date','created_at','created_by','modified_at','modified_by','attachments',]
@@ -365,6 +391,20 @@ class ProjectSerializer(serializers.ModelSerializer):
                 "first_name": instance.client.first_name,
                 "last_name": instance.client.last_name,
                 "email": instance.client.email
+            }
+        # Client User details
+        if instance.client_user is None:
+            data['client_user'] = None
+        else:
+            data['client_user'] = {
+                "id": instance.client_user.id,
+                "first_name": instance.client_user.first_name,
+                "last_name": instance.client_user.last_name,
+                "email": instance.client_user.email,
+                "profile": {
+                    "id": instance.client_user.profile.id,
+                    "name": instance.client_user.profile.name
+                } if instance.client_user.profile else None
             }
 
         # Manager details
@@ -414,6 +454,39 @@ class ProjectSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'client': 'Client is not active.'
             })
+
+        client_user = attrs.get('client_user')
+
+        if client_user is not None:
+            if client_user.status != 'Active':
+                raise serializers.ValidationError({
+                    'client_user': 'Client user is not active.'
+                })
+
+            if (
+                client_user.profile is None
+                or client_user.profile.name.strip().casefold() != 'client'
+            ):
+                raise serializers.ValidationError({
+                    'client_user': 'Only users with Client profile can be selected.'
+                })
+
+        # client_user = attrs.get('client_user')
+
+        # if client_user is not None:
+
+        #             if client_user.status != 'Active':
+        #                 raise serializers.ValidationError({
+        #                     'client_user': 'Client user is not active.'
+        #                 })
+
+        #             if (
+        #                 client_user.profile is None
+        #                 or client_user.profile.name.casefold() != 'client'
+        #             ):
+        #                 raise serializers.ValidationError({
+        #                     'client_user': 'Only users with Client profile can be selected.'
+        #                 })
         manager_id = attrs.get('manager')
 
         if manager_id is not None:
@@ -562,8 +635,8 @@ class ProjectSerializer(serializers.ModelSerializer):
                 project=instance,
                 file=file,
                 file_name=file.name,
-                uploaded_by=user,
-                modified_by=user
+                # uploaded_by=user,
+                # modified_by=user
             )
 
         return instance
@@ -593,6 +666,10 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
     title = serializers.CharField(required=True,allow_blank=False,allow_null=False)
     description = serializers.CharField(required=True,allow_blank=False,allow_null=False) 
     status = serializers.CharField(required=False)
+    updated_at = serializers.DateTimeField(
+    source='modified_at',
+    read_only=True)
+    updated_by = serializers.SerializerMethodField(read_only=True)
     class Meta:
         model = ProjectTask
         fields = ['id','title','description','status','deadline_date',
@@ -678,9 +755,7 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
         # Unique title validation
         if project and title:
             queryset = ProjectTask.objects.filter(
-                project=project,
-                title__iexact=title
-            )
+                project=project,title__iexact=title)  
 
             if self.instance:
                 queryset = queryset.exclude(id=self.instance.id)
@@ -692,31 +767,10 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
 
         return attrs
 
-
-    # def validate(self, attrs):      # Unique title validation within the same project
-
-    #     project = attrs.get(
-    #         'project',self.instance.project if self.instance else None)
-            
-    #     title = attrs.get('title',self.instance.title if self.instance else None)
-    #     if project and title:
-    #         queryset = ProjectTask.objects.filter(project=project,title__iexact=title)
-    #         if self.instance:
-    #             queryset = queryset.exclude(id=self.instance.id)      
-
-    #         if queryset.exists():
-    #             raise serializers.ValidationError({
-    #                 'title': 'This task title already exists in this project.'
-    #             })
-
-    #     return attrs
-
-    # Common User Details
     def get_user_details(self, user):
 
         if not user:
             return None
-
         return {
             'id': user.id,
             'first_name': user.first_name,
@@ -741,7 +795,9 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
                 'project_title': instance.project.project_title,
                 'project_type': instance.project.project_type,
                 'project_status': instance.project.project_status,
-                'start_date': instance.project.start_date
+                'start_date': instance.project.start_date,
+                'date_of_completion': instance.project.date_of_completion
+
             }
         else:
             data['project'] = None
@@ -763,7 +819,7 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
 
         # Updated By details
         data['updated_by'] = self.get_user_details(
-            instance.updated_by
+            instance.modified_by
         )
 
         return data

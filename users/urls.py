@@ -30,7 +30,7 @@ urlpatterns = [
     path('project-tasks/',ProjectTaskListCreateAPI.as_view(),name='project-task-list-create'),
     path('project-tasks/<int:pk>/',ProjectTaskDetailAPI.as_view(),name='project-task-detail'),
     path('task-comments/',TaskCommentListCreateAPI.as_view(),name='task-comments'),
-    path('task-comments/<int:pk>/', TaskCommentDetailAPI.as_view(), name='task-comment-detail'),
+    path('task-comments/<int:pk>/', TaskCommentDetailAPI.as_view(), name='task-comment-detail'),]  
     
     
     
@@ -51,7 +51,7 @@ urlpatterns = [
     
     
     
-]   
+ 
     
 
     

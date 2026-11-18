@@ -1,8 +1,38 @@
 from django.db import models
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
-from rest_framework.utils.field_mapping import get_field_kwargs
 
-class User(AbstractUser):
+class BaseModel(models.Model):
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="%(class)s_created",
+        null=True,
+        blank=True
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        blank=True,
+        null=True
+    )
+    modified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="%(class)s_modified",
+        null=True,
+        blank=True
+    )
+    modified_at = models.DateTimeField(
+        auto_now=True,
+        blank=True,
+        null=True
+    )
+
+    class Meta:
+        abstract = True
+ 
+
+class User(AbstractUser,BaseModel):
     email = models.EmailField(unique = True, null=True, blank=True)
     user_name = models.CharField(max_length=100,unique= True, null = True, blank = True)
 
@@ -43,10 +73,10 @@ class User(AbstractUser):
     otp_expires_at = models.DateTimeField(null=True, blank=True)
     otp_request_count = models.PositiveIntegerField(default=0,null=True, blank=True)
     otp_request_window_start = models.DateTimeField(null= True, blank = True)
-    created_by = models.ForeignKey('self',on_delete=models.SET_NULL,null=True,blank=True,related_name='created_users')
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_by = models.ForeignKey('self',on_delete=models.SET_NULL,null=True,blank=True,related_name='modified_users')
-    modified_at = models.DateTimeField(auto_now=True)
+    # created_by = models.ForeignKey('self',on_delete=models.SET_NULL,null=True,blank=True,related_name='created_users')
+    # created_at = models.DateTimeField(auto_now_add=True)
+    # modified_by = models.ForeignKey('self',on_delete=models.SET_NULL,null=True,blank=True,related_name='modified_users')
+    # modified_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.email
@@ -59,7 +89,7 @@ class Profile(models.Model):
     def __str__(self):
         return self.name
     
-class Client(models.Model):
+class Client(BaseModel):
     STATUS_CHOICES = [
         ('Active', 'Active'),
         ('Inactive', 'Inactive'),]
@@ -76,24 +106,24 @@ class Client(models.Model):
         null=True, blank=True
     )
 
-    created_at = models.DateTimeField(auto_now_add=True,null=True, blank=True) # auto now automatically save kr leta h date and time at the time of creation
-    created_by = models.ForeignKey(  # relation b/W user and client model 
-        'User',on_delete=models.PROTECT,         # if i as a user create a client then my reference save in client model  
-        related_name='created_clients',
-        null=True, blank=True
-    )
-    modified_at = models.DateTimeField(auto_now=True,null=True, blank=True)
-    modified_by = models.ForeignKey(
-        'User',on_delete=models.PROTECT,null=True, blank=True,
-        related_name='modified_clients' # help in retrieve the client modiefied by the user lastly
-    )
+    # created_at = models.DateTimeField(auto_now_add=True,null=True, blank=True) # auto now automatically save kr leta h date and time at the time of creation
+    # created_by = models.ForeignKey(  # relation b/W user and client model 
+    #     'User',on_delete=models.PROTECT,         # if i as a user create a client then my reference save in client model  
+    #     related_name='created_clients',
+    #     null=True, blank=True
+    # )
+    # modified_at = models.DateTimeField(auto_now=True,null=True, blank=True)
+    # modified_by = models.ForeignKey(
+    #     'User',on_delete=models.PROTECT,null=True, blank=True,
+    #     related_name='modified_clients' # help in retrieve the client modiefied by the user lastly
+    # )
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
 
 
-class Project(models.Model):
+class Project(BaseModel):
     PROJECT_TYPE_CHOICE = [
         ('Web Development','Web Development'),
         ('Mobile App', 'Mobile App'),
@@ -117,16 +147,18 @@ class Project(models.Model):
     
     client = models.ForeignKey( # project kis client ke liye h
         'Client',on_delete=models.PROTECT,related_name='projects',null=True, blank=True)
+    client_user = models.ForeignKey('User',on_delete=models.PROTECT,related_name='client_user_projects',
+    null=True,blank=True)
     manager = models.ForeignKey( # project ka manager (in user)
         'User',on_delete=models.PROTECT,related_name='managed_projects',null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
-    created_by = models.ForeignKey('User', on_delete=models.PROTECT, related_name='created_projects',
-        null=True, blank=True)
-    modified_at = models.DateTimeField(auto_now=True, null=True, blank=True)
-    modified_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='modified_projects',
-        null=True, blank=True) 
+    # created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    # created_by = models.ForeignKey('User', on_delete=models.PROTECT, related_name='created_projects',
+    #     null=True, blank=True)
+    # modified_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    # modified_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='modified_projects',
+    #     null=True, blank=True) 
     is_deleted = models.BooleanField(default=False)
-    deleted_at = models.DateTimeField(null=True, blank=True) 
+     
 
     def __str__(self):
         return f"{self.project_title}"
@@ -143,7 +175,7 @@ class ProjectAttachment(models.Model):
 
 
 
-class ProjectTask(models.Model):
+class ProjectTask(BaseModel):
     STATUS_CHOICES = [
         ('Pending', 'Pending'),
         ('In Progress', 'In Progress'),
@@ -159,10 +191,10 @@ class ProjectTask(models.Model):
     status = models.CharField(max_length=20,choices=STATUS_CHOICES,default='Pending',null=True,blank=True)
     deadline_date = models.DateField(null=True, blank=True)
     completion_date = models.DateField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
-    created_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='created_tasks',null=True,blank=True)
-    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
-    updated_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='updated_tasks',null=True,blank=True)
+    # created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    # created_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='created_tasks',null=True,blank=True)
+    # updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    # updated_by = models.ForeignKey('User',on_delete=models.PROTECT,related_name='updated_tasks',null=True,blank=True)
     is_deleted = models.BooleanField(default=False)
     class Meta:
         constraints = [models.UniqueConstraint(fields=['project', 'title'],name='unique_task_title_per_project')]
