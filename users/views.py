@@ -181,7 +181,8 @@ class UserDetailAPI(APIView):
                 {"error": "User not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        if request.data.get('status') == 'Inactive': # soft delete
+        # soft delete
+        if not request.data:
             user.status = 'Inactive'
             user.modified_by = request.user
             user.save(update_fields=[
@@ -189,10 +190,19 @@ class UserDetailAPI(APIView):
                 'modified_by',
                 'modified_at'
             ])
-            return Response(
-                {"message": "User deleted successfully"},
-                status=status.HTTP_200_OK
-            )
+            message = (
+            "Client deleted successfully"
+            if user.profile and user.profile.name == "Client"
+            else "User deleted successfully") 
+
+        return Response(
+            {"message": message},
+            status=status.HTTP_200_OK
+)
+            # return Response(
+            #     {"message": "User deleted successfully"},
+            #     status=status.HTTP_200_OK
+            # )
     
         serializer = UserSerializer( # partial update
             user,data=request.data,partial=True)
@@ -1098,7 +1108,7 @@ class ProjectDetailAPI(APIView):
         return Response(
             {'message': 'Project deleted successfully.'},
             status=status.HTTP_200_OK
-            
+
         )
 class ProfileListCreateView(generics.ListCreateAPIView):
     queryset = Profile.objects.all().order_by('id')
