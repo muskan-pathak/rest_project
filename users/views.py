@@ -18,39 +18,43 @@ ForgotPasswordSerializer,ResetPasswordSerializer,ProjectSerializer,ProjectAttach
 from .utils import validate_user_otp, send_limited_otp
 import logging
 
+
+def is_admin_or_super_admin(user):
+    return (
+        user.profile is not None
+        and user.profile.name.strip().casefold()
+        in ['admin', 'super admin']
+    )
+
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
     permission_classes = [IsAuthenticated] # this for allowing any user to acess this view
+
     def get(self, request):
-        if (
-            request.user.profile is None
-            or request.user.profile.name.strip().casefold()
-            not in ['admin', 'super admin']
-        ):
-                return Response(
-                    {
-                        "error": "Only Admin and Super Admin can get users."
-                    },
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            # users = User.objects.filter(status='Active')
         user_status = request.query_params.get('status', 'Active')
-        users = User.objects.filter(status__iexact=user_status)
-
+        if is_admin_or_super_admin(request.user):
+            users = User.objects.filter(
+                status__iexact=user_status
+            )
+        else:
+            users = User.objects.filter(
+                Q(status__iexact=user_status)
+            ).filter(
+                Q(id=request.user.id) |
+                Q(created_by=request.user)
+            ).distinct()
         # General search
-        search = request.query_params.get("search", "").strip() # query_parms url ki query parameter ko access krta h
-
+        search = request.query_params.get("search", "").strip()
         if search:
             for word in search.split():
-                users = users.filter( # q object ko use krke multiple fields me search kr skte h
-                    Q(username__icontains=word) |   # contains partial match krta h, icontains case insensitive match krta h
+                users = users.filter(
+                    Q(username__icontains=word) |
                     Q(email__icontains=word) |
                     Q(first_name__icontains=word) |
                     Q(last_name__icontains=word) |
                     Q(phone__icontains=word) |
                     Q(profile__name__icontains=word)
                 )
-
-    # Individual filters
+        # Individual filters
         first_name = request.query_params.get("first_name", "").strip()
         last_name = request.query_params.get("last_name", "").strip()
         email = request.query_params.get("email", "").strip()
@@ -76,9 +80,71 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
         paginator = PageNumberPagination()
         paginated_users = paginator.paginate_queryset(users, request)
 
-        serializer = UserSerializer(paginated_users, many=True)
+        serializer = UserSerializer(
+            paginated_users,
+            many=True
+        )
 
         return paginator.get_paginated_response(serializer.data)
+    # def get(self, request):
+    #     if (
+    #         request.user.profile is None
+    #         or request.user.profile.name.strip().casefold()
+    #         not in ['admin', 'super admin']
+    #     ):
+    #             return Response(
+    #                 {
+    #                     "error": "Only Admin and Super Admin can get users."
+    #                 },
+    #                 status=status.HTTP_403_FORBIDDEN
+    #             )
+    #         # users = User.objects.filter(status='Active')
+    #     user_status = request.query_params.get('status', 'Active')
+    #     users = User.objects.filter(status__iexact=user_status)
+
+    #     # General search
+    #     search = request.query_params.get("search", "").strip() # query_parms url ki query parameter ko access krta h
+
+    #     if search:
+    #         for word in search.split():
+    #             users = users.filter( # q object ko use krke multiple fields me search kr skte h
+    #                 Q(username__icontains=word) |   # contains partial match krta h, icontains case insensitive match krta h
+    #                 Q(email__icontains=word) |
+    #                 Q(first_name__icontains=word) |
+    #                 Q(last_name__icontains=word) |
+    #                 Q(phone__icontains=word) |
+    #                 Q(profile__name__icontains=word)
+    #             )
+
+    # # Individual filters
+    #     first_name = request.query_params.get("first_name", "").strip()
+    #     last_name = request.query_params.get("last_name", "").strip()
+    #     email = request.query_params.get("email", "").strip()
+    #     profile = request.query_params.get("profile", "").strip()
+    #     phone = request.query_params.get("phone", "").strip()
+
+    #     if first_name:
+    #         users = users.filter(first_name__icontains=first_name)
+
+    #     if last_name:
+    #         users = users.filter(last_name__icontains=last_name)
+
+    #     if email:
+    #         users = users.filter(email__icontains=email)
+
+    #     if profile:
+    #         users = users.filter(profile__name__iexact=profile)
+
+    #     if phone:
+    #         users = users.filter(phone__icontains=phone)
+
+    #     # Pagination
+    #     paginator = PageNumberPagination()
+    #     paginated_users = paginator.paginate_queryset(users, request)
+
+    #     serializer = UserSerializer(paginated_users, many=True)
+
+    #     return paginator.get_paginated_response(serializer.data)
     
     def post(self, request): # only admin and superadmin can create user
         if request.user.profile is None or request.user.profile.name.strip().casefold() not in ["admin", "super admin"]:
@@ -119,12 +185,21 @@ class UserListCreateAPI(APIView): # this is for creating users and listing all u
         )
 class UserDetailAPI(APIView):
     permission_classes = [IsAuthenticated]
+    def get_user(self, pk, request):
+        users = User.objects.filter(pk=pk)
 
-    def get_user(self, pk):
-        try:
-            return User.objects.get(pk=pk, status='Active')
-        except User.DoesNotExist:
-            return None
+        if not is_admin_or_super_admin(request.user):
+            users = users.filter(id=request.user.id)
+
+        return users.first()
+
+    
+
+    # def get_user(self, pk):
+    #     try:
+    #         return User.objects.get(pk=pk, status='Active')
+    #     except User.DoesNotExist:
+    #         return None
 
     def check_admin_permission(self, request):
 
@@ -143,46 +218,57 @@ class UserDetailAPI(APIView):
         return None
 
     def get(self, request, pk):
-        permission_response = self.check_admin_permission(request)
-        if permission_response:
-            return permission_response
-        user = self.get_user(pk)
+        user = self.get_user(pk, request)
         if user is None:
-            return Response({"error": "User not found"},status=status.HTTP_404_NOT_FOUND)     
-
+            return Response(
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
         serializer = UserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def put(self, request, pk):
-        permission_response = self.check_admin_permission(request)
-        if permission_response:
-            return permission_response
-        user = self.get_user(pk)
+        user = self.get_user(pk, request)
         if user is None:
             return Response(
                 {"error": "User not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        serializer = UserSerializer(user, data=request.data)
+        is_admin = is_admin_or_super_admin(request.user)
+
+        restricted_fields = ['profile', 'email', 'username', 'status']
+
+        if not is_admin and any(
+            field in request.data for field in restricted_fields
+        ):
+            return Response(
+                {"error": "You cannot update profile, email, username or status."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = UserSerializer(user, data=request.data,context={'request': request})
+
         if serializer.is_valid():
             serializer.save(modified_by=request.user)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
-        )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     def patch(self, request, pk):
-        permission_response = self.check_admin_permission(request)
-        if permission_response:
-            return permission_response
-        user = self.get_user(pk)
+        user = self.get_user(pk, request)
         if user is None:
             return Response(
                 {"error": "User not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        # soft delete
+
+        is_admin = is_admin_or_super_admin(request.user)
         if not request.data:
+            if not is_admin:
+                return Response(
+                    {"error": "You are not allowed to delete your account."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
             user.status = 'Inactive'
             user.modified_by = request.user
             user.save(update_fields=[
@@ -191,31 +277,116 @@ class UserDetailAPI(APIView):
                 'modified_at'
             ])
             message = (
-            "Client deleted successfully"
-            if user.profile and user.profile.name == "Client"
-            else "User deleted successfully") 
-
-        return Response(
-            {"message": message},
-            status=status.HTTP_200_OK
-)
-            # return Response(
-            #     {"message": "User deleted successfully"},
-            #     status=status.HTTP_200_OK
-            # )
-    
-        serializer = UserSerializer( # partial update
-            user,data=request.data,partial=True)
-        
-        if serializer.is_valid():
-            serializer.save(modified_by=request.user) 
+                "Client deleted successfully"
+                if user.profile and user.profile.name == "Client"
+                else "User deleted successfully"
+            )
             return Response(
-                serializer.data,status=status.HTTP_200_OK)    
+                {"message": message},
+                status=status.HTTP_200_OK
+            )
+
+        restricted_fields = ['profile', 'email', 'username', 'status']
+
+        if not is_admin and any(
+            field in request.data for field in restricted_fields
+        ):
+            return Response(
+                {"error": "You cannot update profile, email, username or status."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = UserSerializer(user,data=request.data,partial=True,
+        context={'request': request})
+    
+
+        # serializer = UserSerializer(
+        #     user,
+        #     data=request.data,
+        #     partial=True
+        # )
+
+        if serializer.is_valid():
+            serializer.save(modified_by=request.user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+
+   
+
+    # def get(self, request, pk):
+    #     permission_response = self.check_admin_permission(request)
+    #     if permission_response:
+    #         return permission_response
+    #     user = self.get_user(pk)
+    #     if user is None:
+    #         return Response({"error": "User not found"},status=status.HTTP_404_NOT_FOUND)     
+
+    #     serializer = UserSerializer(user)
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # def put(self, request, pk):
+    #     permission_response = self.check_admin_permission(request)
+    #     if permission_response:
+    #         return permission_response
+    #     user = self.get_user(pk,request)
+    #     if user is None:
+    #         return Response(
+    #             {"error": "User not found"},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+    #     serializer = UserSerializer(user, data=request.data)
+    #     if serializer.is_valid():
+    #         serializer.save(modified_by=request.user)
+    #         return Response(serializer.data, status=status.HTTP_200_OK)
+    #     return Response(
+    #         serializer.errors,
+    #         status=status.HTTP_400_BAD_REQUEST
+    #     )
+    # def patch(self, request, pk):
+    #     permission_response = self.check_admin_permission(request)
+    #     if permission_response:
+    #         return permission_response
+    #     user = self.get_user(pk,request)
+    #     if user is None:
+    #         return Response(
+    #             {"error": "User not found"},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
+    #     # soft delete
+    #     if not request.data:
+    #         user.status = 'Inactive'
+    #         user.modified_by = request.user
+    #         user.save(update_fields=[
+    #             'status',
+    #             'modified_by',
+    #             'modified_at'
+    #         ])
+    #         message = (
+    #         "Client deleted successfully"
+    #         if user.profile and user.profile.name == "Client"
+    #         else "User deleted successfully") 
+
+    #     return Response(
+    #         {"message": message},
+    #         status=status.HTTP_200_OK
+
+    #     )
+    #     serializer = UserSerializer( # partial update
+    #         user,data=request.data,partial=True)
+        
+    #     if serializer.is_valid():
+    #         serializer.save(modified_by=request.user) 
+    #         return Response(
+    #             serializer.data,status=status.HTTP_200_OK)    
+
+    #     return Response(
+    #         serializer.errors,
+    #         status=status.HTTP_400_BAD_REQUEST
+    #     )
 class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -412,7 +583,16 @@ class ClientListCreateAPI(APIView):
 
     def get(self, request): # to get the list of clients
         client_status = request.query_params.get('status', 'Active')
-        clients = Client.objects.filter(status__iexact=client_status) 
+        if is_admin_or_super_admin(request.user):
+            clients = Client.objects.filter(
+                status__iexact=client_status
+            )
+        else:
+            clients = Client.objects.filter(
+                status__iexact=client_status,
+                created_by=request.user
+            )
+        # clients = Client.objects.filter(status__iexact=client_status) 
         search = request.query_params.get("search", "").strip() # general search
 
         if search:
@@ -481,15 +661,22 @@ class ClientListCreateAPI(APIView):
 
 class ClientDetailAPI(APIView):
     permission_classes = [IsAuthenticated]
-    def get_client(self, pk):
-        try:
-            return Client.objects.get(pk=pk, status='Active')
-        except Client.DoesNotExist:
-            return None
+    def get_client(self, pk, request):
+        clients = Client.objects.filter(
+            pk=pk,
+            status='Active'
+        )
+        if not is_admin_or_super_admin(request.user):
+            clients = clients.filter(created_by=request.user)
+        return clients.first()
+    # def get_client(self, pk):
+    #     try:
+    #         return Client.objects.get(pk=pk, status='Active')
+    #     except Client.DoesNotExist:
+    #         return None
 
     def get(self, request, pk):
-        client = self.get_client(pk) # calling helper method to get active client
-
+        client = self.get_client(pk,request) # calling helper method to get active client
         if client is None: # check krta h helper method ko clent mila ya nhi
             return Response(
                 {"error": "Client not found"},
@@ -501,8 +688,7 @@ class ClientDetailAPI(APIView):
 
     
     def put(self, request, pk):
-        client = self.get_client(pk)
-
+        client = self.get_client(pk,request)
         if client is None:
             return Response(
                 {"error": "Client not found"},
@@ -521,9 +707,7 @@ class ClientDetailAPI(APIView):
         )
 
     def patch(self, request, pk):
-
-        client = self.get_client(pk)
-
+        client = self.get_client(pk,request)
         if client is None:
             return Response(
                 {"error": "Client not found"},

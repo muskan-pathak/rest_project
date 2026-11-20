@@ -47,6 +47,7 @@ class UserSerializer(serializers.ModelSerializer):
     error_messages={
         'does_not_exist': 'Profile with ID "{pk_value}" does not exist. Please enter a valid profile ID.'
     })
+    username = serializers.CharField(required=False, allow_blank=False)
     profile_details = serializers.SerializerMethodField(read_only=True)    
     gender = serializers.CharField(required=False,allow_blank=True,allow_null=True)
     blood_group = serializers.CharField( required=False,allow_blank=True,allow_null=True)
@@ -59,7 +60,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id','first_name','last_name','email','password', 'profile',
+        fields = ['id','first_name','last_name','email','username','password', 'profile',
         'profile_details','date_of_birth','gender', 'nationality','image','blood_group',
         'phone','permanent_address','current_address','emergency_contact_name','emergency_contact_number',
         'emergency_contact_relationship','status','created_by','created_at','modified_by','modified_at',]
@@ -79,6 +80,30 @@ class UserSerializer(serializers.ModelSerializer):
     #         if value.casefold() == option.casefold():
     #             return option
     #     return value
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if self.instance and request:
+            user = request.user
+            is_admin = (
+                user.profile is not None
+                and user.profile.name.strip().casefold()
+                in ['admin', 'super admin']
+            )
+            restricted_fields = [
+                'profile',
+                'email',
+                'username',
+                'status'
+            ]
+            if not is_admin:
+                for field in restricted_fields:
+                    if field in self.initial_data:
+                        raise serializers.ValidationError({
+                            field: f"You are not allowed to update {field}."
+                        })
+
+        return attrs
 
     
     def get_profile_details(self, obj):
