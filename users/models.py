@@ -91,27 +91,25 @@ class Client(BaseModel):
 
 
 class Project(BaseModel):
-    PROJECT_TYPE_CHOICE = [
-        ('Web Development','Web Development'),
-        ('Mobile App', 'Mobile App'),
-        ('Software', 'Software'),
-        ('Design','Design'),]
+    # PROJECT_TYPE_CHOICE = [
+    #     ('Web Development','Web Development'),
+    #     ('Mobile App', 'Mobile App'),
+    #     ('Software', 'Software'),
+    #     ('Design','Design'),]
     
-    PROJECT_STATUS_CHOICES = [
-        ('Active', 'Active'),
-        ('Inactive', 'Inactive'),
-        ('Pending', 'Pending'),
-        ('In Progress', 'In Progress'),
-        ('Completed', 'Completed'),]
+    # PROJECT_STATUS_CHOICES = [
+    #     ('Active', 'Active'),
+    #     ('Inactive', 'Inactive'),
+    #     ('Pending', 'Pending'),
+    #     ('In Progress', 'In Progress'),
+    #     ('Completed', 'Completed'),]
     
     project_title = models.CharField(max_length= 100,null=True, blank=True)
-    project_type = models.CharField(max_length=50,null=True, blank=True)
+    project_type = models.ForeignKey('ProjectType',on_delete=models.PROTECT,related_name='projects',null=True,blank=True)
     description = models.TextField(null = True,blank=True)
     start_date = models.DateField(auto_now_add=True, null=True, blank=True)
     date_of_completion = models.DateField(null=True, blank=True)
-    project_status = models.CharField(max_length=42,choices=PROJECT_STATUS_CHOICES,default='In Progress',
-        null=True, blank=True)
-    
+    project_status = models.ForeignKey('ProjectStatus',on_delete=models.PROTECT,related_name='projects',null=True,blank=True)  
     client = models.ForeignKey( # project kis client ke liye h
         'Client',on_delete=models.PROTECT,related_name='projects',null=True, blank=True)
     client_user = models.ForeignKey('User',on_delete=models.PROTECT,related_name='client_user_projects',
@@ -123,6 +121,21 @@ class Project(BaseModel):
 
     def __str__(self):
         return f"{self.project_title}"
+
+class ProjectType(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_default = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
+
+class ProjectStatus(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_default = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
 
 
 class ProjectAttachment(models.Model):

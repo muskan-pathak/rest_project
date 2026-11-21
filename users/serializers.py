@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Profile, Client, Project,ProjectAttachment,ProjectTask,TaskComment
+from .models import User, Profile, Client, Project,ProjectAttachment,ProjectTask,TaskComment,ProjectType, ProjectStatus
 from .utils import generate_unique_username
 from django.db import transaction
 
@@ -379,10 +379,20 @@ class ClientSerializer(serializers.ModelSerializer):
         }
 
 class ProjectSerializer(serializers.ModelSerializer):
+    manager = serializers.IntegerField(write_only=True)
+    project_type = serializers.PrimaryKeyRelatedField(
+        queryset=ProjectType.objects.all()
+    )
+
+    project_status = serializers.PrimaryKeyRelatedField(
+        queryset=ProjectStatus.objects.all(),
+        required=False,
+        allow_null=True
+    )
+   
+    attachments = serializers.SerializerMethodField(read_only=True)
     created_by = serializers.SerializerMethodField()
     modified_by = serializers.SerializerMethodField()
-    manager = serializers.IntegerField(write_only=True)
-    attachments = serializers.SerializerMethodField(read_only=True)
 
     new_attachments = serializers.ListField( # list field  use so that multiple file  can be uploaded
         child=serializers.FileField(), 
@@ -398,14 +408,25 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ['id','project_title','project_type','description','attachments','start_date','date_of_completion','project_status',
-                  'client','client_user','manager','created_at','created_by','modified_at','modified_by',
+        fields = ['id','project_title','project_type','description','attachments','project_status',
+                  'client','client_user','manager','start_date','date_of_completion','created_at','created_by','modified_at','modified_by',
                   'new_attachments','delete_attachment_ids', ] 
        
         read_only_fields = ['id','start_date','created_at','created_by','modified_at','modified_by','attachments',]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        # Project Type details
+        data['project_type'] = {
+            "id": instance.project_type.id,
+            "name": instance.project_type.name
+        } if instance.project_type else None
+
+        # Project Status details
+        data['project_status'] = {
+            "id": instance.project_status.id,
+            "name": instance.project_status.name
+        } if instance.project_status else None
 
         # Client details
         if instance.client is None:
@@ -417,6 +438,7 @@ class ProjectSerializer(serializers.ModelSerializer):
                 "last_name": instance.client.last_name,
                 "email": instance.client.email
             }
+
         # Client User details
         if instance.client_user is None:
             data['client_user'] = None
@@ -434,9 +456,9 @@ class ProjectSerializer(serializers.ModelSerializer):
 
         # Manager details
         if instance.manager is None:
-            data['manager'] = None
+            manager_data = None
         else:
-            data['manager'] = {
+            manager_data = {
                 "id": instance.manager.id,
                 "profile_id": instance.manager.profile.id if instance.manager.profile else None,
                 "first_name": instance.manager.first_name,
@@ -444,7 +466,85 @@ class ProjectSerializer(serializers.ModelSerializer):
                 "email": instance.manager.email
             }
 
-        return data
+        ordered_data = {}
+
+        for key, value in data.items():
+            ordered_data[key] = value
+
+            if key == 'client_user':
+                ordered_data['manager'] = manager_data
+
+        return ordered_data
+
+    # def to_representation(self, instance):
+    #     data = super().to_representation(instance)
+
+    #     # Project Type details
+    #     data['project_type'] = {
+    #         "id": instance.project_type.id,
+    #         "name": instance.project_type.name
+    #     } if instance.project_type else None
+
+    #     # Project Status details
+    #     data['project_status'] = {
+    #         "id": instance.project_status.id,
+    #         "name": instance.project_status.name
+    #         } if instance.project_status else None
+    #                             # Client details
+    #                             if instance.client is None:
+    #                                 data['client'] = None
+    #                             else:
+    #                                 data['client'] = {
+    #                                     "id": instance.client.id,
+    #                                     "first_name": instance.client.first_name,
+    #                                     "last_name": instance.client.last_name,
+    #                                     "email": instance.client.email
+    #                                 }
+    #     # Client User details
+    #     if instance.client_user is None:
+    #         data['client_user'] = None
+    #     else:
+    #         data['client_user'] = {
+    #             "id": instance.client_user.id,
+    #             "first_name": instance.client_user.first_name,
+    #             "last_name": instance.client_user.last_name,
+    #             "email": instance.client_user.email,
+    #             "profile": {
+    #                 "id": instance.client_user.profile.id,
+    #                 "name": instance.client_user.profile.name
+    #             } if instance.client_user.profile else None
+    #         }
+    #     # Manager details
+    #     if instance.manager is None:
+    #         manager_data = None
+    #     else:
+    #         manager_data = {
+    #             "id": instance.manager.id,
+    #             "profile_id": instance.manager.profile.id if instance.manager.profile else None,
+    #             "first_name": instance.manager.first_name,
+    #             "last_name": instance.manager.last_name,
+    #             "email": instance.manager.email
+    #         }
+    #     ordered_data = {}
+    #     for key, value in data.items():
+    #         ordered_data[key] = value
+
+    #         if key == 'client_user':
+    #             ordered_data['manager'] = manager_data
+
+    #     return ordered_data
+    #     # if instance.manager is None:
+    #     #     data['manager'] = None
+    #     # else:
+    #     #     data['manager'] = {
+    #     #         "id": instance.manager.id,
+    #     #         "profile_id": instance.manager.profile.id if instance.manager.profile else None,
+    #     #         "first_name": instance.manager.first_name,
+    #     #         "last_name": instance.manager.last_name,
+    #     #         "email": instance.manager.email
+    #     #     }
+
+    #     # return data
 
     def validate_project_title(self, value):
         if value and value.strip():
@@ -457,7 +557,6 @@ class ProjectSerializer(serializers.ModelSerializer):
     
     def validate(self, attrs):
         required_fields = ['project_title', 'project_type', 'manager']
-
         for field in required_fields:
             if self.instance is not None and field not in attrs:
                 continue
@@ -469,10 +568,15 @@ class ProjectSerializer(serializers.ModelSerializer):
                     field: f'{field} is required.'
                 })
 
-            if field in ['project_title', 'project_type'] and not value.strip():
+            if field == 'project_title' and not value.strip():
                 raise serializers.ValidationError({
                     field: f'{field} is required.'
                 })
+
+            # if field in ['project_title', 'project_type'] and not value.strip():
+            #     raise serializers.ValidationError({
+            #         field: f'{field} is required.'
+            #     })
 
         client = attrs.get('client')
         if client is not None and client.status != 'Active':

@@ -25,6 +25,27 @@ def is_admin_or_super_admin(user):
         and user.profile.name.strip().casefold()
         in ['admin', 'super admin']
     )
+def get_accessible_projects(user, queryset):
+    if is_admin_or_super_admin(user):
+        return queryset
+    profile_name = (
+        user.profile.name.strip().casefold()
+        if user.profile else ""
+    )
+    if profile_name == "client":
+        return queryset.filter(client_user=user)
+    return queryset.filter(
+        Q(created_by=user) | Q(manager=user)
+    ).distinct()
+
+def get_accessible_tasks(user, queryset):
+    if is_admin_or_super_admin(user):
+        return queryset
+    return queryset.filter(
+        Q(created_by=user) |
+        Q(assign_by=user) |
+        Q(assign_to=user)
+    ).distinct()
 
 class UserListCreateAPI(APIView): # this is for creating users and listing all users
     permission_classes = [IsAuthenticated] # this for allowing any user to acess this view
@@ -887,13 +908,7 @@ class ProjectListCreateAPI(APIView):
             Project.objects
             .filter(is_deleted=False)
             .exclude(project_status='Inactive')
-            .select_related(
-                'client',
-                'client_user',
-                'client_user__profile',
-                'manager',
-                'manager__profile'
-            )
+            .select_related('client','client_user','client_user__profile','manager','manager__profile')      
             .prefetch_related('attachments')
             .order_by('-id')
         )
@@ -901,13 +916,23 @@ class ProjectListCreateAPI(APIView):
 
     def get(self, request):
         project_status_filter = request.query_params.get('status', 'Active')
-
         if project_status_filter.lower() == 'inactive':
             projects = Project.objects.filter(
                 is_deleted=True
             ).prefetch_related('attachments').order_by('-id')
         else:
             projects = self.get_queryset()
+
+        projects = get_accessible_projects(
+            request.user,
+            projects
+        )
+        # if project_status_filter.lower() == 'inactive':
+        #     projects = Project.objects.filter(
+        #         is_deleted=True
+        #     ).prefetch_related('attachments').order_by('-id')
+        # else:
+        #     projects = self.get_queryset()
 
         search = request.query_params.get("search", "").strip()
 
@@ -1124,9 +1149,19 @@ class ProjectDetailAPI(APIView):
     #         .prefetch_related('attachments')
     #     )
 
-    def get_project(self, pk):
+    # def get_project(self, pk):
+    #     try:
+    #         return self.get_queryset().get(pk=pk)
+    #     except Project.DoesNotExist:
+    #         return None
+
+    def get_project(self, pk, request):
         try:
-            return self.get_queryset().get(pk=pk)
+            projects = get_accessible_projects(
+                request.user,
+                self.get_queryset()
+            )
+            return projects.get(pk=pk)
         except Project.DoesNotExist:
             return None
 
@@ -1138,12 +1173,10 @@ class ProjectDetailAPI(APIView):
                 {'error': 'Project not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
         serializer = ProjectSerializer(
             project,
             context={'request': request}
         )
-
         return Response(serializer.data)
 
     @transaction.atomic
@@ -1715,34 +1748,44 @@ class ProjectTaskListCreateAPI(APIView):
         return (
             ProjectTask.objects
             .filter(is_deleted=False)
-            .select_related(
-                'project',
-                'assign_by',
-                'assign_to',
-                'assign_by__profile',
-                'assign_to__profile'
-            )
+            .select_related('project','assign_by','assign_to','assign_by__profile','assign_to__profile')
             .order_by('-id')
         )
 
-    # GET - List all active tasks
     def get(self, request):
-
         tasks = self.get_queryset()
-
+        tasks = get_accessible_tasks(
+            request.user,
+            tasks
+        )
         paginator = PageNumberPagination()
         paginated_tasks = paginator.paginate_queryset(
             tasks,
             request
         )
-
         serializer = ProjectTaskSerializer(
             paginated_tasks,
             many=True,
             context={'request': request}
         )
-
         return paginator.get_paginated_response(serializer.data)
+
+    # GET - List all active tasks
+    # def get(self, request):
+    #     tasks = self.get_queryset()
+    #     paginator = PageNumberPagination()
+    #     paginated_tasks = paginator.paginate_queryset(
+    #         tasks,
+    #         request
+    #     )
+
+    #     serializer = ProjectTaskSerializer(
+    #         paginated_tasks,
+    #         many=True,
+    #         context={'request': request}
+    #     )
+
+    #     return paginator.get_paginated_response(serializer.data)
 
     # POST - Create new task
     def post(self, request):
@@ -1776,30 +1819,46 @@ class ProjectTaskListCreateAPI(APIView):
 
 class ProjectTaskDetailAPI(APIView):
     permission_classes = [IsAuthenticated]
-
-    def get_task(self, pk):
+    def get_task(self, pk, request):
         try:
-            return (
-                ProjectTask.objects
-                .filter(is_deleted=False)
-                .select_related(
-                    'project',
-                    'assign_by',
-                    'assign_to',
-                    'assign_by__profile',
-                    'assign_to__profile'
-                )
-                .get(pk=pk)
+            tasks = ProjectTask.objects.filter(
+                is_deleted=False
+            ).select_related(
+                'project',
+                'assign_by',
+                'assign_to',
+                'assign_by__profile',
+                'assign_to__profile'
             )
-
+            tasks = get_accessible_tasks(
+                request.user,
+                tasks
+            )
+            return tasks.get(pk=pk)
         except ProjectTask.DoesNotExist:
             return None
 
+    # def get_task(self, pk):
+    #     try:
+    #         return (
+    #             ProjectTask.objects
+    #             .filter(is_deleted=False)
+    #             .select_related(
+    #                 'project',
+    #                 'assign_by',
+    #                 'assign_to',
+    #                 'assign_by__profile',
+    #                 'assign_to__profile'
+    #             )
+    #             .get(pk=pk)
+    #         )
+
+    #     except ProjectTask.DoesNotExist:
+    #         return None
+
     # GET - Retrieve single task
     def get(self, request, pk):
-
-        task = self.get_task(pk)
-
+        task = self.get_task(pk,request)
         if task is None:
             return Response(
                 {'error': 'Task not found.'},
@@ -1810,29 +1869,23 @@ class ProjectTaskDetailAPI(APIView):
             task,
             context={'request': request}
         )
-
         return Response(
             serializer.data,
             status=status.HTTP_200_OK
         )
-
     # PUT - Complete update
     def put(self, request, pk):
-
-        task = self.get_task(pk)
-
+        task = self.get_task(pk,request)
         if task is None:
             return Response(
                 {'error': 'Task not found.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
         serializer = ProjectTaskSerializer(
             task,
             data=request.data,
             context={'request': request}
         )
-
         if serializer.is_valid():
 
             task = serializer.save(
@@ -1854,9 +1907,8 @@ class ProjectTaskDetailAPI(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
   
-    
     def patch(self, request, pk): # partial update and soft delete
-        task = self.get_task(pk)
+        task = self.get_task(pk,request)
         if task is None:
             return Response(
                 {'error': 'Task not found.'},
